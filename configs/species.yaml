@@ -1,0 +1,50 @@
+# Classes d'espèces cibles pour le fine-tuning YOLO.
+#
+# Recentré sur les POISSONS le 2026-08-12 (demande explicite) — les
+# céphalopodes, crustacés, échinodermes (sauf oursins, gardés explicitement),
+# mollusques et cnidaires précédemment présents ont été retirés, avec leurs
+# données (images/labels purgés de data/inaturalist, data/roboflow,
+# data/fathomnet). Toujours PROVISOIRE, à valider avec le Parc/les plongeurs.
+#
+# Classe 0 "poisson" : pas une espèce, mais une classe PARENTE dupliquée --
+# chaque boîte d'une espèce de poisson (classes 1-24) est aussi enregistrée
+# sous "poisson" avec les mêmes coordonnées (cf. src/add_fish_umbrella.py),
+# pour donner plus de volume d'entraînement à une détection "poisson"
+# générique en plus de l'espèce précise. ATTENTION : ceci duplique
+# volontairement les boîtes -- à l'inférence, le pipeline vidéo (track.py)
+# verra donc potentiellement 2 détections (poisson + espèce) au même endroit
+# pour un seul poisson réel, ce qui peut fausser le comptage d'individus du
+# registre si rien n'est fait pour dédupliquer -- pas encore traité, cf.
+# README Points ouverts.
+names:
+  0: poisson                     # classe parente, dupliquée depuis 1-24 (voir ci-dessus)
+
+  # Poissons
+  1: dorade_royale                # Sparus aurata
+  2: bar_europeen                 # Dicentrarchus labrax (loup)
+  3: mulet                        # Mugil cephalus
+  4: sar_commun                   # Diplodus sargus
+  5: girelle                      # Coris julis
+  6: rascasse                     # Scorpaena scrofa
+  7: congre                       # Conger conger
+  8: murene                       # Muraena helena
+  9: saupe                        # Sarpa salpa
+  10: blennie                     # Blenniidae (famille)
+  11: gobie                       # Gobiidae (famille)
+  12: hippocampe                  # Hippocampus hippocampus / H. guttulatus
+  13: castagnole                  # Chromis chromis
+  14: oblade                      # Oblada melanura
+  15: bogue                       # Boops boops
+  16: sar_museau_noir             # Diplodus vulgaris
+  17: sparaillon                  # Diplodus annularis
+  18: serran_chevrette            # Serranus cabrilla
+  19: serran_ecriture             # Serranus scriba
+  20: atherine                    # Atherina hepsetus / A. boyeri
+  21: rouget                      # Mullus surmuletus / M. barbatus
+  22: chinchard                   # Trachurus trachurus
+  23: vive                        # Trachinus draco
+  24: sole                        # Solea solea
+
+  # Échinodermes (exception gardée explicitement, hors périmètre "poissons")
+  25: oursin_violet               # Paracentrotus lividus
+  26: oursin_noir                 # Arbacia lixula

@@ -1,0 +1,48 @@
+# Correspondance entre les classes YOLO (configs/species.yaml) et les noms
+# de taxons iNaturalist à interroger, via src/fetch_inaturalist_sam.py
+# --taxa-config configs/inaturalist_taxa.yaml (src/fetch_inaturalist.py n'a
+# plus de CLI propre, cf. son en-tête).
+#
+# Nettoyé le 2026-08-12 (recentrage poissons) : les entrées pour les classes
+# retirées (poisson_indetermine, poulpe, seiche, calmar, crabe_vert,
+# crabe_marbre, crevette, bernard_l_ermite, langouste, etoile_de_mer,
+# holothurie, moule, patelle, nudibranche, anemone, meduse) ont été
+# supprimées. `oursin_violet`/`oursin_noir` gardés (exception explicite,
+# hors périmètre "poissons"). Les 12 nouvelles espèces de poissons
+# (castagnole...sole) sont dans configs/inaturalist_taxa_new.yaml, pas ici
+# — cf. son en-tête pour pourquoi.
+#
+# iNaturalist n'a PAS d'images annotées avec des bounding boxes : ce sont
+# des photos de type "classification" (un spécimen par photo, généralement
+# centré/cadré par le photographe). Les 14 classes de ce fichier ont été
+# initialement récupérées avec des labels "plein cadre" (0.5 0.5 1.0 1.0),
+# puis re-boxées via SAM + révision manuelle (cf. README "Entraînement") —
+# ce chemin plein-cadre n'existe plus dans le code (retiré 2026-08-12) :
+# tout nouveau fetch passe par fetch_inaturalist_sam.py (boîtes SAM2
+# natives dès le téléchargement, pas d'étape plein-cadre intermédiaire).
+#
+# Un nom de taxon peut être une espèce (ex. "Sparus aurata"), un genre, une
+# famille ou un ordre (ex. "Blenniidae") si aucune espèce unique ne
+# représente la classe — iNaturalist accepte tous les rangs taxonomiques.
+#
+# Seules les photos sous licence réutilisable sont récupérées (filtre serveur
+# `photo_license`, vérifié le 2026-08-07) : cc0, cc-by, cc-by-sa, cc-by-nc,
+# cc-by-nc-sa. Les licences -nd (no derivatives) sont exclues. Chaque image
+# téléchargée est attribuée dans data/inaturalist/ATTRIBUTIONS.csv
+# (obligatoire pour les licences cc-by*).
+
+dorade_royale: ["Sparus aurata"]
+bar_europeen: ["Dicentrarchus labrax"]
+mulet: ["Mugil cephalus"]
+sar_commun: ["Diplodus sargus"]
+girelle: ["Coris julis"]
+rascasse: ["Scorpaena scrofa"]
+congre: ["Conger conger"]
+murene: ["Muraena helena"]
+saupe: ["Sarpa salpa"]
+blennie: ["Blenniidae"]
+gobie: ["Gobiidae"]
+hippocampe: ["Hippocampus hippocampus", "Hippocampus guttulatus"]
+
+oursin_violet: ["Paracentrotus lividus"]
+oursin_noir: ["Arbacia lixula"]
