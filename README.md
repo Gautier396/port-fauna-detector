@@ -7,42 +7,37 @@ animal revu plusieurs fois soit compté en double.
 
 ## Statut actuel
 
-- **Données d'entraînement** : iNaturalist uniquement (seule source active).
-  27 classes dans `configs/species.yaml` : `poisson` (classe parente,
-  cf. plus bas) + 24 espèces de poissons + `oursin_violet`/`oursin_noir`
-  (exception hors "poissons", gardée explicitement).
-- **Boxing** : SAM2 (`sam2.1_t`), automatique, plusieurs boîtes par image
-  si plusieurs individus (bancs de poissons). Filtre de plausibilité sous-
-  marine (heuristique couleur, best-effort) avant conservation.
+- **Données d'entraînement** : pivot vers **SFISHTRACK** (dataset externe,
+  vidéos sous-marines annotées COCO — segmentation d'instance + tracking
+  multi-objet), remplace l'ancien pipeline iNaturalist (retiré, cf. plus
+  bas). **Téléchargement pas encore terminé** (26 Go, bloqué côté Google
+  Drive — "too many users have viewed or downloaded this file recently").
+- **Classes labellisées par SFISHTRACK** : à confirmer une fois le fichier
+  réel accessible — la classe COCO connue à ce jour est une classe unique
+  `fish` (pas de distinction par espèce), donc tout mappe vers `poisson`
+  (classe 0) pour l'instant. Voir `configs/sfishtrack_species_map.yaml`.
+- **Conséquence directe** : les 24 classes d'espèces (1-24) et les 2
+  classes d'oursins (25-26) de `configs/species.yaml` n'ont plus AUCUN
+  mécanisme d'acquisition de données actif (l'ancien pipeline iNaturalist,
+  seule source qui les alimentait, a été retiré). Seule la classe `poisson`
+  (0) a une source active tant que SFISHTRACK reste mono-classe.
 - **Prétraitement** : `src/preprocess.py` corrige la dominante bleu/vert de
   l'eau (balance des blancs gray-world, proportionnelle à la dominante
-  détectée — n'altère pas les photos déjà neutres/chaudes, ex. macro au
-  flash). Appliqué en place sur le dataset ET à chaque frame vidéo à
-  l'inférence (`track.py`, `app.py`), pour que l'entraînement et l'inférence
-  voient la même distribution de couleurs.
+  détectée — n'altère pas les images déjà neutres/chaudes). Appliqué en
+  place sur le dataset ET à chaque frame vidéo à l'inférence (`track.py`,
+  `app.py`), pour que l'entraînement et l'inférence voient la même
+  distribution de couleurs.
 - **Modèles entraînés** (`models/portfauna_v1.pt`, `portfauna_v2.pt`) :
-  sur l'ancien schéma de classes, **plus compatibles** avec le
-  `species.yaml` actuel — un nouvel entraînement est nécessaire avant
-  d'utiliser `app.py` en confiance.
+  issus de l'ancien pipeline iNaturalist, **obsolètes** — un nouvel
+  entraînement sur SFISHTRACK est nécessaire avant d'utiliser `app.py` en
+  confiance.
 - **Pipeline vidéo** (tracking → embeddings → registre → export) :
   jamais exécuté sur une vraie vidéo du port.
-
-## Classe "poisson" (parente)
-
-Chaque boîte d'une espèce de poisson (classes 1-24) est dupliquée sous la
-classe 0 `poisson` (mêmes coordonnées) via `src/add_fish_umbrella.py`, pour
-donner plus de volume d'entraînement à une détection poisson générique.
-**Compromis assumé** : à l'inférence, ça peut faire apparaître 2 détections
-(poisson + espèce précise) au même endroit pour un seul poisson réel — pas
-encore traité côté `track.py`/`registry.py` (cf. Points ouverts).
 
 ## Architecture
 
 ```
-iNaturalist ──► fetch_inaturalist_sam.py (utilise fetch_inaturalist.py en bibliothèque) ──► images + boîtes SAM2
-                                                                          │
-                                                                          ▼
-                                              add_fish_umbrella.py (ajoute la classe "poisson")
+SFISHTRACK (COCO, par vidéo) ──► convert_sfishtrack.py ──► images + boîtes YOLO (data/sfishtrack/)
                                                                           │
                                                                           ▼
                                                          train.py ──► models/<name>.pt
@@ -52,7 +47,7 @@ Vidéo GoPro ──► track.py (détection+tracking) ──┬─► embeddings
 ```
 
 `pipeline.py` enchaîne tracking → embeddings → registre pour une vidéo.
-`app.py` et `watch_relabel.py`-like outils : voir Structure.
+`app.py` : voir Structure.
 
 ## Installation
 
@@ -64,12 +59,8 @@ pip install -r requirements.txt
 
 ```
 src/
-  fetch_inaturalist.py      <- bibliothèque API iNaturalist (pas de CLI — importé par fetch_inaturalist_sam.py)
-  fetch_inaturalist_sam.py  <- CLI dataset iNaturalist (boîtes SAM2 natives, multi-objets)
+  convert_sfishtrack.py     <- convertit les annotations COCO SFISHTRACK (par vidéo) en labels YOLO
   preprocess.py              <- correction couleur sous-marine (dataset en place + frames vidéo à l'inférence)
-  add_fish_umbrella.py      <- ajoute la classe "poisson" (duplique les boîtes d'espèces)
-  merge_datasets.py         <- fusionne plusieurs sources en un jeu YOLO (inutile tant qu'iNaturalist
-                                est la seule source active — cf. configs/data_inaturalist.yaml)
   train.py                  <- entraînement YOLO -> models/<name>.pt
   track.py                  <- détection + ByteTrack + crops (marque needs_review)
   review_queue.py           <- file de vérification (tracks à confiance basse)
@@ -78,52 +69,62 @@ src/
   registry.py               <- registre SQLite + anti-doublon (espèce + fenêtre temporelle)
   export.py                 <- CSV, stats
 configs/
-  species.yaml              <- 27 classes cibles (PROVISOIRE)
-  inaturalist_taxa.yaml     <- classe -> taxon iNaturalist (espèces historiques)
-  inaturalist_taxa_new.yaml <- classe -> taxon iNaturalist (nouvelles espèces, fichier séparé exprès)
-  data_inaturalist.yaml      <- généré, format Ultralytics (pointe directement sur data/inaturalist/)
-data/inaturalist/            <- images + labels YOLO + ATTRIBUTIONS.csv (licences)
+  species.yaml                    <- 27 classes cibles (PROVISOIRE)
+  sfishtrack_species_map.yaml     <- catégorie COCO SFISHTRACK -> classe species.yaml
+  data_sfishtrack.yaml            <- généré par convert_sfishtrack.py, format Ultralytics
+data/sfishtrack/              <- images + labels YOLO générés par convert_sfishtrack.py
+data/external/sfishtrack/     <- zip SFISHTRACK brut (téléchargement)
 outputs/                     <- registry.db, tracks/, crops/, embeddings/, review_queue/
 pipeline.py                  <- orchestrateur bout-en-bout (une vidéo -> registre)
 app.py                       <- interface glisser-déposer, test vidéo avec le dernier modèle (port 7860)
+view_labels.py                <- revue en lecture seule des labels générés (port 7862)
 ```
 
 ## Utilisation
 
 ```bash
-# Dataset (nouvelles espèces, boîtes SAM2 natives multi-objets) :
-python src/fetch_inaturalist_sam.py --check-only
-python src/fetch_inaturalist_sam.py --output data/inaturalist --max-images-per-class 300
+# Une fois le dataset SFISHTRACK téléchargé (data/external/sfishtrack/) :
+# 1. Voir les catégories réelles + couverture du mapping (aucune écriture)
+python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/dataset --check-only
 
-# Correction couleur sous-marine (en place, idempotent — incrémental après un nouveau fetch) :
-python src/preprocess.py --images-dir data/inaturalist
+# 2. Convertir (une fois configs/sfishtrack_species_map.yaml rempli/vérifié)
+python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/dataset --output data/sfishtrack
 
-# Compléter la classe "poisson" (idempotent, à relancer après tout nouveau fetch) :
-python src/add_fish_umbrella.py --images-dir data/inaturalist
+# Correction couleur sous-marine (en place, idempotent) :
+python src/preprocess.py --images-dir data/sfishtrack
 
-# Entraînement (directement sur data/inaturalist/, seule source active) :
-python src/train.py --data configs/data_inaturalist.yaml --name portfauna_v3
+# Entraînement :
+python src/train.py --data configs/data_sfishtrack.yaml --name portfauna_v3
 
 # Pipeline vidéo complet :
 python pipeline.py --video data/raw/plongee1.mp4 --model models/portfauna_v3.pt
 
 # Test rapide glisser-déposer :
 python app.py
+
+# Revue des labels générés :
+python view_labels.py
 ```
 
 ## Points ouverts
 
-- **Double détection poisson/espèce à l'inférence** (cf. section dédiée
-  plus haut) — pas de dédoublonnage implémenté côté `track.py`/`registry.py`.
-- **Modèles existants obsolètes** vis-à-vis du `species.yaml` actuel — à
-  ré-entraîner (`portfauna_v3`) avant tout usage réel.
-- **12 nouvelles espèces sans données** pour l'instant (castagnole, oblade,
-  bogue, sar_museau_noir, sparaillon, serran_chevrette, serran_ecriture,
-  atherine, rouget, chinchard, vive, sole) — fetch interrompu volontairement,
-  à relancer (`fetch_inaturalist_sam.py`).
-- **Filtre "sous-marin"** (`fetch_inaturalist_sam.py`) : heuristique couleur
-  best-effort, pas parfaite.
+- **SFISHTRACK pas encore téléchargé** — bloqué côté Google Drive, à
+  réessayer. `convert_sfishtrack.py` est écrit et testé sur des données
+  synthétiques reproduisant la structure attendue, mais **pas encore
+  validé sur le vrai fichier** (noms de catégories COCO exacts à confirmer
+  via `--check-only`).
+- **24 classes d'espèces + 2 classes d'oursins sans source de données** :
+  l'ancien pipeline iNaturalist (seule source qui les alimentait) a été
+  retiré (2026-08-12, pivot SFISHTRACK) — seule la classe `poisson` a une
+  source active tant que SFISHTRACK reste mono-classe "fish". À rouvrir
+  explicitement si ces classes doivent être ré-alimentées un jour.
+- **Modèles existants obsolètes** (`portfauna_v1`/`v2`, issus de
+  l'ancien pipeline iNaturalist) — à ré-entraîner sur SFISHTRACK
+  (`portfauna_v3`) avant tout usage réel.
 - **`species.yaml`** toujours provisoire, à valider avec le Parc/les plongeurs.
 - **Seuils non calibrés** : anti-doublon registre (`--threshold` 0.75),
   file de vérification (`--review-threshold` 0.5).
 - **Pipeline vidéo jamais testé** sur une vraie vidéo du port.
+- **iNaturalist et SFISHTRACK ne doivent pas être mélangés** dans un même
+  jeu d'entraînement (demande explicite) — pas de mécanisme de fusion
+  multi-source actuellement dans le projet.

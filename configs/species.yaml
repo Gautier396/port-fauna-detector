@@ -6,18 +6,17 @@
 # données (images/labels purgés de data/inaturalist, data/roboflow,
 # data/fathomnet). Toujours PROVISOIRE, à valider avec le Parc/les plongeurs.
 #
-# Classe 0 "poisson" : pas une espèce, mais une classe PARENTE dupliquée --
-# chaque boîte d'une espèce de poisson (classes 1-24) est aussi enregistrée
-# sous "poisson" avec les mêmes coordonnées (cf. src/add_fish_umbrella.py),
-# pour donner plus de volume d'entraînement à une détection "poisson"
-# générique en plus de l'espèce précise. ATTENTION : ceci duplique
-# volontairement les boîtes -- à l'inférence, le pipeline vidéo (track.py)
-# verra donc potentiellement 2 détections (poisson + espèce) au même endroit
-# pour un seul poisson réel, ce qui peut fausser le comptage d'individus du
-# registre si rien n'est fait pour dédupliquer -- pas encore traité, cf.
-# README Points ouverts.
+# Classe 0 "poisson" : pas une espèce, une classe PARENTE générique.
+# Historiquement (pipeline iNaturalist, retiré 2026-08-12 lors du pivot
+# SFISHTRACK) peuplée en dupliquant chaque boîte d'espèce (classes 1-24)
+# sous "poisson" en plus de l'espèce précise (src/add_fish_umbrella.py,
+# supprimé avec le reste du pipeline iNaturalist). SFISHTRACK écrit
+# directement en "poisson" (dataset mono-classe "fish" à ce jour, cf.
+# configs/sfishtrack_species_map.yaml) -- pas de duplication en jeu
+# actuellement. Les classes 1-24 (espèces) et 25-26 (oursins) n'ont plus
+# de source de données active (cf. README Points ouverts).
 names:
-  0: poisson                     # classe parente, dupliquée depuis 1-24 (voir ci-dessus)
+  0: poisson                     # classe parente générique
 
   # Poissons
   1: dorade_royale                # Sparus aurata

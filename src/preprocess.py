@@ -25,7 +25,7 @@ Usage (bibliothèque) :
     frame = enhance_underwater(frame)  # image BGR (cv2), uint8
 
 Usage (CLI, dataset en place) :
-    python src/preprocess.py --images-dir data/inaturalist
+    python src/preprocess.py --images-dir data/sfishtrack
 """
 import argparse
 from pathlib import Path
@@ -47,10 +47,9 @@ def gray_world_white_balance(image: np.ndarray, max_gain: float = 1.5, strength_
     vraie dominante eau) où une correction gray-world classique sur-corrige
     et ajoute un cast bleu/violet artificiel qui n'existait pas (confirmé
     visuellement avant d'intégrer cette version). `cast_strength` mesure la
-    même signature que `looks_underwater()` dans fetch_inaturalist_sam.py
-    (B+G contre R) : ~0 sur une image déjà neutre ou à dominante chaude (pas
-    de correction), jusqu'à 1 sur une forte dominante eau (correction pleine,
-    plafonnée par `max_gain`).
+    dominante eau (B+G contre R) : ~0 sur une image déjà neutre ou à
+    dominante chaude (pas de correction), jusqu'à 1 sur une forte dominante
+    eau (correction pleine, plafonnée par `max_gain`).
     """
     img = image.astype(np.float32)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -113,7 +112,7 @@ def process_dataset(images_dir: Path, force: bool = False) -> int:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--images-dir", default="data/inaturalist", help="Dossier dataset (contient images/train, images/val)")
+    parser.add_argument("--images-dir", default="data/sfishtrack", help="Dossier dataset (contient images/train, images/val)")
     parser.add_argument("--force", action="store_true", help="Retraiter aussi les images déjà marquées faites")
     args = parser.parse_args()
 

@@ -1,13 +1,12 @@
-"""Entraîne un modèle YOLO de détection sur le jeu iNaturalist (configs/data_inaturalist.yaml).
+"""Entraîne un modèle YOLO de détection sur le jeu SFISHTRACK (configs/data_sfishtrack.yaml).
 
 Choix par défaut, documentés plutôt qu'arbitraires :
   - `yolov8s.pt` (small) : compromis capacité/risque de surapprentissage
-    raisonnable pour ~1.5-2k images sur 27 classes déséquilibrées (cf.
-    README, Points ouverts) — yolov8n serait plus prudent si le
-    surapprentissage s'avère un problème en pratique, yolov8m/l
+    raisonnable pour un premier entraînement — yolov8n serait plus prudent
+    si le surapprentissage s'avère un problème en pratique, yolov8m/l
     demanderaient plus de données pour être justifiés.
-  - `--patience 20` (arrêt anticipé) : boîtes SAM2, pas de vérité terrain
-    parfaite ; pas d'intérêt à épuiser `--epochs` si la validation stagne.
+  - `--patience 20` (arrêt anticipé) : pas d'intérêt à épuiser `--epochs`
+    si la validation stagne.
   - `--batch -1` (auto) : ultralytics choisit la taille de batch occupant
     ~60% de la VRAM disponible plutôt qu'une valeur arbitraire.
   - seed fixé (`--seed 42`) : reproductibilité.
@@ -22,7 +21,7 @@ Sorties :
     d'écrasement silencieux d'un run précédent).
 
 Usage:
-    python src/train.py --data configs/data_inaturalist.yaml --name portfauna_v3
+    python src/train.py --data configs/data_sfishtrack.yaml --name portfauna_v3
 """
 import argparse
 import os
@@ -72,7 +71,7 @@ def run_training(
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--data", default="configs/data_inaturalist.yaml", help="data.yaml Ultralytics (défaut: configs/data_inaturalist.yaml)")
+    parser.add_argument("--data", default="configs/data_sfishtrack.yaml", help="data.yaml Ultralytics (défaut: configs/data_sfishtrack.yaml)")
     parser.add_argument("--model", default="yolov8s.pt", help="Poids de départ (défaut: yolov8s.pt, pré-entraîné COCO)")
     parser.add_argument("--epochs", type=int, default=100, help="Nombre d'époques max (défaut: 100)")
     parser.add_argument("--imgsz", type=int, default=640, help="Taille d'image (défaut: 640)")
