@@ -23,9 +23,8 @@ Seul le champ COCO standard "bbox" ([x, y, largeur, hauteur] en pixels,
 origine coin haut-gauche) est utilisé — pas besoin des polygones de
 segmentation ni des masques séparés pour de la détection par boîte.
 
-Sortie volontairement dans data/sfishtrack/ séparé de data/inaturalist/, et
-PAS ajouté à src/merge_datasets.py::SOURCES — demande explicite (2026-08-12) :
-ne pas mélanger iNaturalist et SFISHTRACK dans un même jeu fusionné.
+Sortie dans data/sfishtrack/, jeu d'entraînement autonome (pas fusionné
+avec d'autres sources).
 
 Split train/val PAR VIDÉO (pas par frame) : les frames d'une même vidéo sont
 très corrélées (même scène, même poisson qui bouge peu d'une frame à

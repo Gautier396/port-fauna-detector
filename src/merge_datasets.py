@@ -11,12 +11,6 @@ une vérité terrain incohérente (déjà pressenti au moment du choix "union"
 `data/roboflow/` restent sur disque (rien de supprimé) au cas où on voudrait
 les réintégrer plus tard — juste exclus de la fusion pour l'instant.
 
-**data/sfishtrack/ (cf. src/convert_sfishtrack.py) ne doit PAS être ajouté
-à SOURCES** — demande explicite (2026-08-12) : "je veux pas que iNaturalist
-et l'autre dataset se mélange". Les deux jeux restent des sources
-d'entraînement séparées (dossiers, data.yaml et éventuels modèles
-distincts) tant que l'utilisateur n'a pas explicitement changé d'avis.
-
 Usage:
     python src/merge_datasets.py --output data/merged --data-yaml configs/data_merged.yaml
 """
