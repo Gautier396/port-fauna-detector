@@ -12,7 +12,8 @@
 # sous "poisson" en plus de l'espèce précise (src/add_fish_umbrella.py,
 # supprimé avec le reste du pipeline iNaturalist). SFISHTRACK écrit
 # directement en "poisson" (dataset mono-classe à ce jour -- catégorie COCO
-# "object" ou "fish" selon le fichier, cf. configs/sfishtrack_species_map.yaml)
+# "object" ou "fish" selon le fichier, cf. COCO_NAME_TO_SPECIES_NAME dans
+# src/convert_sfishtrack.py)
 # -- pas de duplication en jeu actuellement. Les classes 1-24 (espèces) et
 # 25-26 (oursins) n'ont plus de source de données active (cf. README Points
 # ouverts).

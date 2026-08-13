@@ -18,7 +18,9 @@ animal revu plusieurs fois soit compté en double.
   `"object"` ou `"fish"` selon le fichier, pas de distinction par espèce),
   tout mappe vers `poisson` (classe 0). Les couleurs dans `Masks/` encodent
   l'identité de suivi (tracking) par individu, pas l'espèce (vérifié sur
-  des pixels réels). Voir `configs/sfishtrack_species_map.yaml`.
+  des pixels réels). Mapping codé en dur dans `src/convert_sfishtrack.py`
+  (`COCO_NAME_TO_SPECIES_NAME`) — pas de fichier de config séparé pour un
+  mapping aussi trivial.
 - **Conséquence directe** : les 24 classes d'espèces (1-24) et les 2
   classes d'oursins (25-26) de `configs/species.yaml` n'ont plus AUCUN
   mécanisme d'acquisition de données actif (l'ancien pipeline iNaturalist,
@@ -73,7 +75,6 @@ src/
   export.py                 <- CSV, stats
 configs/
   species.yaml                    <- 27 classes CIBLES (PROVISOIRE, vision long terme -- pas ce qu'on entraîne aujourd'hui)
-  sfishtrack_species_map.yaml     <- catégorie COCO SFISHTRACK -> classe species.yaml
   data_sfishtrack.yaml            <- généré par convert_sfishtrack.py -- ne contient QUE les classes
                                       réellement présentes dans les labels (juste "poisson" à ce jour),
                                       pas les 27 de species.yaml -- entraîner sur 27 classes nominales

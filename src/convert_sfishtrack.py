@@ -23,10 +23,12 @@ Chaque Annotations/videoXXX.json est un COCO standard : "videos" (nom local
 à ce fichier, pas fiable pour identifier la vidéo — on utilise le nom de
 fichier), "images" (file_name, width, height, video_id — champ local
 toujours =1 puisqu'un fichier = une vidéo), "categories" (une seule
-catégorie observée, "object" — pas de distinction par espèce à ce jour,
-cf. configs/sfishtrack_species_map.yaml), "annotations" (bbox, category_id,
-segmentation RLE + track_id — pas utilisés ici, ce projet entraîne sur des
-images fixes, pas du tracking, et seulement des boîtes).
+catégorie par fichier, "object" pour 53/54 vidéos et "fish" pour la
+dernière — mêmes sens, mapping codé en dur ci-dessous, cf.
+COCO_NAME_TO_SPECIES_NAME : pas de fichier de config séparé pour un mapping
+aussi trivial tant qu'il n'y a qu'une seule classe), "annotations" (bbox,
+category_id, segmentation RLE + track_id — pas utilisés ici, ce projet
+entraîne sur des images fixes, pas du tracking, et seulement des boîtes).
 
 Seul le champ COCO standard "bbox" ([x, y, largeur, hauteur] en pixels,
 origine coin haut-gauche) est utilisé.
@@ -43,7 +45,7 @@ Usage:
     # 1. Voir les catégories réelles + couverture du mapping (aucune écriture)
     python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/SFISHTRACK --check-only
 
-    # 2. Convertir (une fois configs/sfishtrack_species_map.yaml vérifié)
+    # 2. Convertir
     python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/SFISHTRACK --output data/sfishtrack
 """
 import argparse
@@ -58,13 +60,19 @@ import yaml
 
 VIDEO_ID_RE = re.compile(r"^video(\d+)$")
 
+# Catégorie COCO SFISHTRACK -> classe species.yaml. Codé en dur plutôt que
+# dans un fichier de config séparé : le mapping réel est trivial (une seule
+# classe cible, "poisson") et un fichier dédié serait de l'indirection sans
+# complexité à absorber. Si SFISHTRACK ajoute un jour des catégories par
+# espèce, remplacer par un vrai mapping configurable à ce moment-là.
+COCO_NAME_TO_SPECIES_NAME = {"object": "poisson", "fish": "poisson"}
 
-def load_species_map(species_path: Path, map_path: Path) -> tuple[dict[int, str], dict[str, int]]:
+
+def load_species_map(species_path: Path) -> tuple[dict[int, str], dict[str, int]]:
     species = yaml.safe_load(species_path.read_text(encoding="utf-8"))["names"]
     name_to_id = {name: cls_id for cls_id, name in species.items()}
-    raw_map = yaml.safe_load(map_path.read_text(encoding="utf-8")) or {}
     coco_name_to_class_id = {}
-    for coco_name, species_name in raw_map.items():
+    for coco_name, species_name in COCO_NAME_TO_SPECIES_NAME.items():
         if species_name not in name_to_id:
             print(f"  Avertissement : '{species_name}' (mappé depuis '{coco_name}') absent de species.yaml, ignoré.")
             continue
@@ -112,7 +120,7 @@ def check_coverage(dataset_root: Path, coco_name_to_class_id: dict[str, int]) ->
     print(f"{videos_seen} vidéo(s) (fichiers Annotations/*.json), {len(ann_count_by_name)} catégorie(s) au total :\n")
     for name, n in sorted(ann_count_by_name.items(), key=lambda kv: -kv[1]):
         mapped = coco_name_to_class_id.get(name)
-        status = f"-> {mapped} ({name})" if mapped is not None else "PAS MAPPÉE (à ajouter dans sfishtrack_species_map.yaml)"
+        status = f"-> {mapped} ({name})" if mapped is not None else "PAS MAPPÉE (à ajouter dans COCO_NAME_TO_SPECIES_NAME)"
         print(f"  [{n:>7} annotation(s)]  {name!r}  {status}")
 
     if missing_frames_dirs:
@@ -243,7 +251,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dataset-root", required=True, help="Dossier SFISHTRACK/ extrait (contient Annotations/, Frames/, ...)")
     parser.add_argument("--species-config", default="configs/species.yaml", help="Classes YOLO (défaut: configs/species.yaml)")
-    parser.add_argument("--species-map", default="configs/sfishtrack_species_map.yaml", help="Mapping catégorie COCO -> classe species.yaml")
     parser.add_argument("--output", default="data/sfishtrack", help="Dossier de sortie YOLO (défaut: data/sfishtrack)")
     parser.add_argument("--data-yaml", default="configs/data_sfishtrack.yaml", help="Chemin du data.yaml Ultralytics généré")
     parser.add_argument("--val-split", type=float, default=0.15, help="Fraction de VIDÉOS en validation (défaut: 0.15)")
@@ -251,7 +258,7 @@ def main():
     args = parser.parse_args()
 
     dataset_root = Path(args.dataset_root)
-    species, coco_name_to_class_id = load_species_map(Path(args.species_config), Path(args.species_map))
+    species, coco_name_to_class_id = load_species_map(Path(args.species_config))
 
     if args.check_only:
         check_coverage(dataset_root, coco_name_to_class_id)
