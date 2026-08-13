@@ -6,13 +6,17 @@ Choix par défaut, documentés plutôt qu'arbitraires :
     justifier `yolov8s` sans risque excessif de surapprentissage ; passer à
     `yolov8m`/`l` est raisonnable si la capacité s'avère limitante en
     pratique (mAP qui plafonne bien avant que la validation ne stagne).
-  - `--epochs 200` / `--patience 20` : le plafond n'a quasiment aucun coût
-    grâce à l'arrêt anticipé — si la validation plafonne avant, l'entraînement
-    s'arrête tout seul (patience) sans consommer les époques restantes.
-    Autant mettre `--epochs` haut par défaut plutôt que risquer de couper
-    un entraînement qui progressait encore, surtout sur un jeu aussi
-    volumineux que SFISHTRACK (23 233 images) où la dynamique de
-    convergence par époque n'a pas encore été observée en pratique.
+  - `--epochs 200` / `--patience 100` : un premier run réel (2026-08-13,
+    `portfauna_v3`, patience=20) s'est arrêté à l'époque 25 (meilleur
+    résultat époque 5, mAP50-95=0.130) — mais le taux d'apprentissage
+    d'ultralytics décroît sur la totalité de `--epochs` (ici 200), donc à
+    l'époque 25 il n'avait décru que d'environ 12% : patience=20 a
+    probablement coupé l'entraînement avant que le LR n'ait assez baissé
+    pour permettre une convergence plus fine, pas parce que le modèle avait
+    réellement atteint son plafond. `--patience 100` (la moitié de
+    `--epochs`) garantit qu'un plateau précoce ne coupe plus avant que le
+    LR ait significativement décru, tout en gardant un filet de sécurité si
+    le modèle plafonne réellement après l'époque 100.
   - `--batch -1` (auto) : ultralytics choisit la taille de batch occupant
     ~60% de la VRAM disponible plutôt qu'une valeur arbitraire.
   - seed fixé (`--seed 42`) : reproductibilité.
@@ -82,7 +86,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=200, help="Nombre d'époques max (défaut: 200, coupé plus tôt par --patience si la validation plafonne avant)")
     parser.add_argument("--imgsz", type=int, default=640, help="Taille d'image (défaut: 640)")
     parser.add_argument("--batch", type=int, default=-1, help="Taille de batch, -1 = auto ~60%% VRAM (défaut: -1)")
-    parser.add_argument("--patience", type=int, default=20, help="Arrêt anticipé si la validation stagne N époques (défaut: 20)")
+    parser.add_argument("--patience", type=int, default=100, help="Arrêt anticipé si la validation stagne N époques (défaut: 100 -- cf. docstring, un patience trop bas coupe avant que le LR schedule ait assez décru)")
     parser.add_argument("--seed", type=int, default=42, help="Graine aléatoire (défaut: 42)")
     parser.add_argument("--device", default=None, help="Device (défaut: 0 si CUDA disponible, sinon cpu)")
     parser.add_argument("--name", required=True, help="Nom du run (dossier de sortie + nom du modèle final)")
