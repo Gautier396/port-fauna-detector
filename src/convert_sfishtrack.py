@@ -151,13 +151,14 @@ def resolve_frame_path(frame_index: dict[int, Path], file_name: str) -> Path | N
     return frame_index.get(int(m.group(1))) if m else None
 
 
-def convert(dataset_root: Path, coco_name_to_class_id: dict[str, int], output_dir: Path, val_split: float) -> dict[str, int]:
+def convert(dataset_root: Path, coco_name_to_class_id: dict[str, int], output_dir: Path, val_split: float) -> tuple[dict[str, int], set[int]]:
     video_ids = [video_id for video_id, _, _ in iter_video_annotations(dataset_root)]
     shuffled = list(video_ids)
     random.Random(42).shuffle(shuffled)
     n_val = max(1, int(len(shuffled) * val_split)) if shuffled else 0
     val_videos = set(shuffled[:n_val])
 
+    used_class_ids: set[int] = set()
     counts = {"videos": 0, "images": 0, "boxes": 0, "missing_image_file": 0, "missing_bbox_field": 0}
     for video_id, coco, frames_dir in iter_video_annotations(dataset_root):
         cat_names = {c["id"]: c["name"] for c in coco.get("categories", [])}
@@ -210,15 +211,27 @@ def convert(dataset_root: Path, coco_name_to_class_id: dict[str, int], output_di
             (dst_labels_dir / f"{out_name}.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
             counts["images"] += 1
             counts["boxes"] += len(lines)
+            used_class_ids.update(class_id for class_id, _ in boxes)
 
-    return counts
+    return counts, used_class_ids
 
 
-def write_data_yaml(species: dict, output_dir: Path, data_yaml_path: Path) -> None:
+def write_data_yaml(species: dict, used_class_ids: set[int], output_dir: Path, data_yaml_path: Path) -> None:
+    """N'écrit dans "names" que les classes réellement présentes dans les
+    labels convertis, pas tout species.yaml (27 classes) : SFISHTRACK est
+    mono-classe à ce jour (tout mappe vers "poisson", id 0) — entraîner un
+    détecteur nominalement 27-classes alors que 26 d'entre elles n'ont
+    jamais un seul exemple positif serait un gâchis de capacité et rendrait
+    les métriques par classe inutilisables (AP non défini pour les classes
+    absentes). Si une future source ajoute des classes d'espèces réelles,
+    used_class_ids grandira en conséquence, aucun changement de code requis
+    ici (les entrées manquantes de species.yaml sont juste omises, YOLO
+    n'exige pas des ids contigus dans "names")."""
+    filtered_names = {cls_id: name for cls_id, name in species.items() if cls_id in used_class_ids}
     data_yaml_path.parent.mkdir(parents=True, exist_ok=True)
     data_yaml_path.write_text(
         yaml.safe_dump(
-            {"path": str(output_dir.resolve()), "train": "images/train", "val": "images/val", "names": species},
+            {"path": str(output_dir.resolve()), "train": "images/train", "val": "images/val", "names": filtered_names},
             allow_unicode=True,
             sort_keys=False,
         ),
@@ -245,10 +258,11 @@ def main():
         return
 
     output_dir = Path(args.output)
-    counts = convert(dataset_root, coco_name_to_class_id, output_dir, args.val_split)
-    write_data_yaml(species, output_dir, Path(args.data_yaml))
+    counts, used_class_ids = convert(dataset_root, coco_name_to_class_id, output_dir, args.val_split)
+    write_data_yaml(species, used_class_ids, output_dir, Path(args.data_yaml))
 
     print(f"{counts['videos']} vidéo(s), {counts['images']} image(s), {counts['boxes']} boîte(s) -> {output_dir}")
+    print(f"Classes présentes dans les labels : {sorted(species[i] for i in used_class_ids)}")
     if counts["missing_image_file"]:
         print(f"Avertissement : {counts['missing_image_file']} frame(s) référencée(s) dans un Annotations/*.json mais introuvable(s) sur disque.")
     if counts["missing_bbox_field"]:

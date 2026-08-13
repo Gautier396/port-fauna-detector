@@ -72,9 +72,12 @@ src/
   registry.py               <- registre SQLite + anti-doublon (espèce + fenêtre temporelle)
   export.py                 <- CSV, stats
 configs/
-  species.yaml                    <- 27 classes cibles (PROVISOIRE)
+  species.yaml                    <- 27 classes CIBLES (PROVISOIRE, vision long terme -- pas ce qu'on entraîne aujourd'hui)
   sfishtrack_species_map.yaml     <- catégorie COCO SFISHTRACK -> classe species.yaml
-  data_sfishtrack.yaml            <- généré par convert_sfishtrack.py, format Ultralytics
+  data_sfishtrack.yaml            <- généré par convert_sfishtrack.py -- ne contient QUE les classes
+                                      réellement présentes dans les labels (juste "poisson" à ce jour),
+                                      pas les 27 de species.yaml -- entraîner sur 27 classes nominales
+                                      alors que 26 n'ont aucun exemple aurait été un gâchis de capacité
 data/sfishtrack/              <- images + labels YOLO générés par convert_sfishtrack.py (54 vidéos, 147582 boîtes)
 data/external/sfishtrack/     <- SFISHTRACK.zip (25.6 Go, gardé comme sauvegarde -- le dossier
                                   extrait a été supprimé après conversion pour l'espace disque ;

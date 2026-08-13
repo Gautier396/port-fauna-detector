@@ -1,10 +1,11 @@
 """Entraîne un modèle YOLO de détection sur le jeu SFISHTRACK (configs/data_sfishtrack.yaml).
 
 Choix par défaut, documentés plutôt qu'arbitraires :
-  - `yolov8s.pt` (small) : compromis capacité/risque de surapprentissage
-    raisonnable pour un premier entraînement — yolov8n serait plus prudent
-    si le surapprentissage s'avère un problème en pratique, yolov8m/l
-    demanderaient plus de données pour être justifiés.
+  - `yolov8s.pt` (small) : SFISHTRACK est un jeu conséquent pour une seule
+    classe (23 233 images, 147 582 boîtes, cf. README) — largement de quoi
+    justifier `yolov8s` sans risque excessif de surapprentissage ; passer à
+    `yolov8m`/`l` est raisonnable si la capacité s'avère limitante en
+    pratique (mAP qui plafonne bien avant que la validation ne stagne).
   - `--patience 20` (arrêt anticipé) : pas d'intérêt à épuiser `--epochs`
     si la validation stagne.
   - `--batch -1` (auto) : ultralytics choisit la taille de batch occupant
