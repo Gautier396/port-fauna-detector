@@ -10,12 +10,15 @@ animal revu plusieurs fois soit compté en double.
 - **Données d'entraînement** : pivot vers **SFISHTRACK** (dataset externe,
   vidéos sous-marines annotées COCO — segmentation d'instance + tracking
   multi-objet), remplace l'ancien pipeline iNaturalist (retiré, cf. plus
-  bas). **Téléchargement pas encore terminé** (26 Go, bloqué côté Google
-  Drive — "too many users have viewed or downloaded this file recently").
-- **Classes labellisées par SFISHTRACK** : à confirmer une fois le fichier
-  réel accessible — la classe COCO connue à ce jour est une classe unique
-  `fish` (pas de distinction par espèce), donc tout mappe vers `poisson`
-  (classe 0) pour l'instant. Voir `configs/sfishtrack_species_map.yaml`.
+  bas). **Téléchargé et converti** : 54 vidéos, 23 233 images, 147 582
+  boîtes dans `data/sfishtrack/` (`configs/data_sfishtrack.yaml` prêt pour
+  `train.py`).
+- **Classes labellisées par SFISHTRACK** : confirmé par inspection réelle
+  des 54 fichiers d'annotations — une seule catégorie COCO (mono-classe,
+  `"object"` ou `"fish"` selon le fichier, pas de distinction par espèce),
+  tout mappe vers `poisson` (classe 0). Les couleurs dans `Masks/` encodent
+  l'identité de suivi (tracking) par individu, pas l'espèce (vérifié sur
+  des pixels réels). Voir `configs/sfishtrack_species_map.yaml`.
 - **Conséquence directe** : les 24 classes d'espèces (1-24) et les 2
   classes d'oursins (25-26) de `configs/species.yaml` n'ont plus AUCUN
   mécanisme d'acquisition de données actif (l'ancien pipeline iNaturalist,
@@ -72,8 +75,10 @@ configs/
   species.yaml                    <- 27 classes cibles (PROVISOIRE)
   sfishtrack_species_map.yaml     <- catégorie COCO SFISHTRACK -> classe species.yaml
   data_sfishtrack.yaml            <- généré par convert_sfishtrack.py, format Ultralytics
-data/sfishtrack/              <- images + labels YOLO générés par convert_sfishtrack.py
-data/external/sfishtrack/     <- zip SFISHTRACK brut (téléchargement)
+data/sfishtrack/              <- images + labels YOLO générés par convert_sfishtrack.py (54 vidéos, 147582 boîtes)
+data/external/sfishtrack/     <- SFISHTRACK.zip (25.6 Go, gardé comme sauvegarde -- le dossier
+                                  extrait a été supprimé après conversion pour l'espace disque ;
+                                  ré-extraire avec `unzip SFISHTRACK.zip` si besoin de retraiter)
 outputs/                     <- registry.db, tracks/, crops/, embeddings/, review_queue/
 pipeline.py                  <- orchestrateur bout-en-bout (une vidéo -> registre)
 app.py                       <- interface glisser-déposer, test vidéo avec le dernier modèle (port 7860)
@@ -83,12 +88,14 @@ view_labels.py                <- revue en lecture seule des labels générés (p
 ## Utilisation
 
 ```bash
-# Une fois le dataset SFISHTRACK téléchargé (data/external/sfishtrack/) :
-# 1. Voir les catégories réelles + couverture du mapping (aucune écriture)
-python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/dataset --check-only
+# Si besoin de retraiter (le dossier extrait est supprimé après conversion) :
+unzip data/external/sfishtrack/SFISHTRACK.zip -d data/external/sfishtrack/
 
-# 2. Convertir (une fois configs/sfishtrack_species_map.yaml rempli/vérifié)
-python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/dataset --output data/sfishtrack
+# 1. Voir les catégories réelles + couverture du mapping (aucune écriture)
+python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/SFISHTRACK --check-only
+
+# 2. Convertir (écrase data/sfishtrack/)
+python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/SFISHTRACK --output data/sfishtrack
 
 # Correction couleur sous-marine (en place, idempotent) :
 python src/preprocess.py --images-dir data/sfishtrack
@@ -108,19 +115,16 @@ python view_labels.py
 
 ## Points ouverts
 
-- **SFISHTRACK pas encore téléchargé** — bloqué côté Google Drive, à
-  réessayer. `convert_sfishtrack.py` est écrit et testé sur des données
-  synthétiques reproduisant la structure attendue, mais **pas encore
-  validé sur le vrai fichier** (noms de catégories COCO exacts à confirmer
-  via `--check-only`).
+- **`portfauna_v3` pas encore entraîné** sur SFISHTRACK — les données sont
+  prêtes (`configs/data_sfishtrack.yaml`), reste à lancer `train.py`.
 - **24 classes d'espèces + 2 classes d'oursins sans source de données** :
   l'ancien pipeline iNaturalist (seule source qui les alimentait) a été
   retiré (2026-08-12, pivot SFISHTRACK) — seule la classe `poisson` a une
-  source active tant que SFISHTRACK reste mono-classe "fish". À rouvrir
+  source active, SFISHTRACK étant mono-classe (confirmé). À rouvrir
   explicitement si ces classes doivent être ré-alimentées un jour.
 - **Modèles existants obsolètes** (`portfauna_v1`/`v2`, issus de
-  l'ancien pipeline iNaturalist) — à ré-entraîner sur SFISHTRACK
-  (`portfauna_v3`) avant tout usage réel.
+  l'ancien pipeline iNaturalist, gardés comme référence historique) — à
+  remplacer par `portfauna_v3` avant tout usage réel.
 - **`species.yaml`** toujours provisoire, à valider avec le Parc/les plongeurs.
 - **Seuils non calibrés** : anti-doublon registre (`--threshold` 0.75),
   file de vérification (`--review-threshold` 0.5).
