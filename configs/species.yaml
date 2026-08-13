@@ -11,10 +11,11 @@
 # SFISHTRACK) peuplée en dupliquant chaque boîte d'espèce (classes 1-24)
 # sous "poisson" en plus de l'espèce précise (src/add_fish_umbrella.py,
 # supprimé avec le reste du pipeline iNaturalist). SFISHTRACK écrit
-# directement en "poisson" (dataset mono-classe "fish" à ce jour, cf.
-# configs/sfishtrack_species_map.yaml) -- pas de duplication en jeu
-# actuellement. Les classes 1-24 (espèces) et 25-26 (oursins) n'ont plus
-# de source de données active (cf. README Points ouverts).
+# directement en "poisson" (dataset mono-classe à ce jour -- catégorie COCO
+# "object" ou "fish" selon le fichier, cf. configs/sfishtrack_species_map.yaml)
+# -- pas de duplication en jeu actuellement. Les classes 1-24 (espèces) et
+# 25-26 (oursins) n'ont plus de source de données active (cf. README Points
+# ouverts).
 names:
   0: poisson                     # classe parente générique
 

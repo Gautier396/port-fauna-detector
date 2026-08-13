@@ -1,7 +1,7 @@
-"""Interface de consultation en lecture seule des labels YOLO générés
-automatiquement (SAM2) sur data/inaturalist — pas d'édition, juste
-visualiser les boîtes pour contrôle qualité. Fonctionne même pendant un
-fetch en cours (scanne aussi les images pas encore réparties train/val).
+"""Interface de consultation en lecture seule des labels YOLO — pas
+d'édition, juste visualiser les boîtes pour contrôle qualité. Scanne aussi
+les images pas encore réparties train/val (utile pendant un traitement en
+cours).
 
 Usage:
     python view_labels.py
@@ -19,10 +19,13 @@ import gradio as gr
 import yaml
 
 PROJECT_ROOT = Path(__file__).parent
-DATA_DIR = PROJECT_ROOT / "data" / "inaturalist"
-SPECIES_PATH = PROJECT_ROOT / "configs" / "species.yaml"
+DATA_DIR = PROJECT_ROOT / "data" / "sfishtrack"
+DATA_YAML_PATH = PROJECT_ROOT / "configs" / "data_sfishtrack.yaml"
 
-NAMES = yaml.safe_load(SPECIES_PATH.read_text(encoding="utf-8"))["names"]
+# Lu depuis data_sfishtrack.yaml (classes réellement présentes dans les
+# labels), pas configs/species.yaml (27 classes cibles) -- sinon le menu de
+# filtre proposerait 26 espèces qui ne matcheraient jamais rien.
+NAMES = yaml.safe_load(DATA_YAML_PATH.read_text(encoding="utf-8"))["names"]
 NAME_TO_ID = {v: k for k, v in NAMES.items()}
 
 
@@ -100,11 +103,10 @@ def on_filter_change(species_filter):
 
 def build_interface() -> gr.Blocks:
     species_choices = ["toutes"] + [NAMES[k] for k in sorted(NAMES)]
-    with gr.Blocks(title="Revue des labels (SAM2)") as demo:
+    with gr.Blocks(title="Revue des labels") as demo:
         gr.Markdown(
-            "# Revue des labels générés (SAM2) — `data/inaturalist`\n"
-            "Lecture seule (pas de suppression). Actualisé en direct — marche "
-            "même pendant un fetch en cours."
+            "# Revue des labels — `data/sfishtrack`\n"
+            "Lecture seule (pas de suppression). Actualisé en direct."
         )
         with gr.Row():
             species_dd = gr.Dropdown(choices=species_choices, value="toutes", label="Filtrer par espèce")
