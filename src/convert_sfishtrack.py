@@ -2,26 +2,34 @@
 tracking multi-objet, une vidéo par fichier) en labels YOLO (bounding box),
 pour intégration dans le pipeline d'entraînement existant (configs/species.yaml).
 
-Structure attendue (racine passée via --dataset-root) :
-    dataset/
-      videos/          <- vidéos sources, pas utilisées ici (on part des frames)
-      frames/<video_id>/frame_XXXXXX.jpg
-      annotations/<video_id>.json   <- un COCO par vidéo
-      masks/masks_XXX/mask_XXXXXX.jpg   <- pas utilisées (segmentation en plus
-                                            des boîtes, ce projet n'entraîne
-                                            que sur des boîtes englobantes)
-      metadata/<video_id>.json      <- pas utilisé pour l'instant
+Structure réelle (racine passée via --dataset-root = dossier "SFISHTRACK/"
+extrait du zip) — vérifiée sur le vrai fichier le 2026-08-13 :
+    SFISHTRACK/
+      Videos/                    <- vidéos sources, pas utilisées ici (on part des frames)
+      Frames/video_XXX/YYYYYY.png    <- ex. Frames/video_012/000000.png
+      Annotations/videoXXX.json      <- un COCO par vidéo, ex. Annotations/video012.json
+                                         (PAS de "_" ici, contrairement à Frames/video_XXX/)
+      Masks/masks_XXX/               <- pas utilisées (segmentation en plus des
+                                         boîtes, ce projet n'entraîne que sur
+                                         des boîtes englobantes)
+      metadata/videoXXX.json         <- pas utilisé pour l'instant
 
-Chaque annotations/<video_id>.json est un COCO standard : "categories"
-(class_labels — à la date d'écriture, incertain si multi-espèces ou classe
-unique "fish", cf. configs/sfishtrack_species_map.yaml), "images"
-(frame_index, file_name...), "annotations" (bbox, category_id, un
-identifiant de tracking par instance — pas utilisé ici, ce projet entraîne
-sur des images fixes, pas du tracking).
+Le nom de dossier vidéo (Annotations/video012.json -> "video012") ne
+correspond PAS directement au dossier de frames ("Frames/video_012/", avec
+un "_") : `frames_dir_for()` fait la conversion (insère le "_" avant le
+numéro).
+
+Chaque Annotations/videoXXX.json est un COCO standard : "videos" (nom local
+à ce fichier, pas fiable pour identifier la vidéo — on utilise le nom de
+fichier), "images" (file_name, width, height, video_id — champ local
+toujours =1 puisqu'un fichier = une vidéo), "categories" (une seule
+catégorie observée, "object" — pas de distinction par espèce à ce jour,
+cf. configs/sfishtrack_species_map.yaml), "annotations" (bbox, category_id,
+segmentation RLE + track_id — pas utilisés ici, ce projet entraîne sur des
+images fixes, pas du tracking, et seulement des boîtes).
 
 Seul le champ COCO standard "bbox" ([x, y, largeur, hauteur] en pixels,
-origine coin haut-gauche) est utilisé — pas besoin des polygones de
-segmentation ni des masques séparés pour de la détection par boîte.
+origine coin haut-gauche) est utilisé.
 
 Sortie dans data/sfishtrack/, jeu d'entraînement autonome (pas fusionné
 avec d'autres sources).
@@ -31,28 +39,24 @@ très corrélées (même scène, même poisson qui bouge peu d'une frame à
 l'autre) — les répartir aléatoirement entre train et val ferait fuiter
 essentiellement la même image des deux côtés.
 
-**NON TESTÉ sur les vraies données** au moment de l'écriture (zip SFISHTRACK
-bloqué côté Google Drive, "too many users..."). À valider dès que le
-dataset réel est disponible : noms exacts des catégories COCO (cf.
-configs/sfishtrack_species_map.yaml, volontairement vide — à remplir depuis
-la sortie réelle de --check-only) et le nom exact du champ frame/index dans
-"images" (essaie file_name, sinon frame_index).
-
 Usage:
     # 1. Voir les catégories réelles + couverture du mapping (aucune écriture)
-    python src/convert_sfishtrack.py --dataset-root <chemin>/dataset --check-only
+    python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/SFISHTRACK --check-only
 
-    # 2. Convertir (une fois configs/sfishtrack_species_map.yaml rempli)
-    python src/convert_sfishtrack.py --dataset-root <chemin>/dataset --output data/sfishtrack
+    # 2. Convertir (une fois configs/sfishtrack_species_map.yaml vérifié)
+    python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/SFISHTRACK --output data/sfishtrack
 """
 import argparse
 import json
 import random
+import re
 import shutil
 from collections import defaultdict
 from pathlib import Path
 
 import yaml
+
+VIDEO_ID_RE = re.compile(r"^video(\d+)$")
 
 
 def load_species_map(species_path: Path, map_path: Path) -> tuple[dict[int, str], dict[str, int]]:
@@ -68,38 +72,83 @@ def load_species_map(species_path: Path, map_path: Path) -> tuple[dict[int, str]
     return species, coco_name_to_class_id
 
 
+def frames_dir_for(frames_root: Path, video_id: str) -> Path:
+    """Annotations/video012.json -> video_id="video012" -> dossier Frames/video_012/."""
+    m = VIDEO_ID_RE.match(video_id)
+    folder_name = f"video_{m.group(1)}" if m else video_id
+    return frames_root / folder_name
+
+
 def iter_video_annotations(dataset_root: Path):
-    """Un (video_id, coco_dict, frames_dir) par fichier annotations/<video_id>.json."""
-    annotations_dir = dataset_root / "annotations"
-    frames_dir = dataset_root / "frames"
+    """Un (video_id, coco_dict, frames_dir) par fichier Annotations/videoXXX.json."""
+    annotations_dir = dataset_root / "Annotations"
+    frames_root = dataset_root / "Frames"
     for json_path in sorted(annotations_dir.glob("*.json")):
         video_id = json_path.stem
         coco = json.loads(json_path.read_text(encoding="utf-8"))
-        yield video_id, coco, frames_dir / video_id
+        yield video_id, coco, frames_dir_for(frames_root, video_id)
 
 
 def check_coverage(dataset_root: Path, coco_name_to_class_id: dict[str, int]) -> None:
     ann_count_by_name = defaultdict(int)
     videos_seen = 0
+    missing_frames_dirs = []
     for video_id, coco, frames_dir in iter_video_annotations(dataset_root):
         videos_seen += 1
         cat_names = {c["id"]: c["name"] for c in coco.get("categories", [])}
         for ann in coco.get("annotations", []):
             ann_count_by_name[cat_names.get(ann["category_id"], "?")] += 1
+        if not frames_dir.is_dir():
+            missing_frames_dirs.append((video_id, frames_dir))
         if videos_seen == 1:
             img0 = coco.get("images", [{}])[0] if coco.get("images") else {}
             print(f"Champs 'images' (vidéo {video_id}) : {sorted(img0.keys())}")
-            print(f"Frames sur disque pour {video_id} ({frames_dir}) : {'trouvé' if frames_dir.is_dir() else 'INTROUVABLE'}\n")
+            print(f"Frames attendues pour {video_id} -> {frames_dir} : {'trouvé' if frames_dir.is_dir() else 'INTROUVABLE'}\n")
 
     if videos_seen == 0:
-        print(f"Aucun fichier .json trouvé dans {dataset_root / 'annotations'}.")
+        print(f"Aucun fichier .json trouvé dans {dataset_root / 'Annotations'}.")
         return
 
-    print(f"{videos_seen} vidéo(s) (fichiers annotations/*.json), {len(ann_count_by_name)} catégorie(s) au total :\n")
+    print(f"{videos_seen} vidéo(s) (fichiers Annotations/*.json), {len(ann_count_by_name)} catégorie(s) au total :\n")
     for name, n in sorted(ann_count_by_name.items(), key=lambda kv: -kv[1]):
         mapped = coco_name_to_class_id.get(name)
         status = f"-> {mapped} ({name})" if mapped is not None else "PAS MAPPÉE (à ajouter dans sfishtrack_species_map.yaml)"
         print(f"  [{n:>7} annotation(s)]  {name!r}  {status}")
+
+    if missing_frames_dirs:
+        print(f"\nAvertissement : {len(missing_frames_dirs)} vidéo(s) sans dossier Frames/ correspondant "
+              f"(ex. {missing_frames_dirs[0][0]} -> {missing_frames_dirs[0][1]}).")
+
+
+FRAME_NUM_RE = re.compile(r"(\d+)")
+
+
+def build_frame_index(frames_dir: Path) -> dict[int, Path]:
+    """Numéro de frame (entier, sans le padding) -> chemin réel du fichier.
+
+    Nécessaire car le nommage des frames n'est PAS uniforme sur tout le
+    dataset : la plupart des vidéos utilisent "NNNNNN.png", mais un premier
+    lot (~vidéos 1-26, pas un intervalle propre) utilise encore
+    "frame_NNNNNN.jpg" — un ancien format d'extraction jamais harmonisé,
+    alors que les Annotations/*.json, eux, ont tous été régénérés plus tard
+    en supposant uniformément "NNNNNN.png" (confirmé par les dates de
+    fichiers : Frames de janvier vs Annotations d'avril pour ces vidéos).
+    Indexer par numéro de frame (pas par nom exact) contourne ce décalage
+    quel que soit le nom réel sur disque.
+    """
+    index = {}
+    if not frames_dir.is_dir():
+        return index
+    for p in frames_dir.iterdir():
+        m = FRAME_NUM_RE.search(p.stem)
+        if m:
+            index[int(m.group(1))] = p
+    return index
+
+
+def resolve_frame_path(frame_index: dict[int, Path], file_name: str) -> Path | None:
+    m = FRAME_NUM_RE.search(Path(file_name).stem)
+    return frame_index.get(int(m.group(1))) if m else None
 
 
 def convert(dataset_root: Path, coco_name_to_class_id: dict[str, int], output_dir: Path, val_split: float) -> dict[str, int]:
@@ -134,6 +183,8 @@ def convert(dataset_root: Path, coco_name_to_class_id: dict[str, int], output_di
         dst_images_dir.mkdir(parents=True, exist_ok=True)
         dst_labels_dir.mkdir(parents=True, exist_ok=True)
 
+        frame_index = build_frame_index(frames_dir)
+
         counts["videos"] += 1
         for img_id, boxes in anns_by_image.items():
             img_meta = images_by_id.get(img_id)
@@ -143,20 +194,19 @@ def convert(dataset_root: Path, coco_name_to_class_id: dict[str, int], output_di
             if not file_name or not w or not h:
                 continue
 
-            src_image = frames_dir / file_name
-            if not src_image.exists():
+            src_image = resolve_frame_path(frame_index, file_name)
+            if src_image is None or not src_image.exists():
                 counts["missing_image_file"] += 1
                 continue
 
-            stem = Path(file_name).stem
             lines = []
             for class_id, (x, y, bw, bh) in boxes:
                 cx, cy = (x + bw / 2) / w, (y + bh / 2) / h
                 nw, nh = bw / w, bh / h
                 lines.append(f"{class_id} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}")
 
-            out_name = f"sft_{video_id}_{stem}"
-            shutil.copy(src_image, dst_images_dir / f"{out_name}.jpg")
+            out_name = f"sft_{video_id}_{src_image.stem}"
+            shutil.copy(src_image, dst_images_dir / f"{out_name}{src_image.suffix}")
             (dst_labels_dir / f"{out_name}.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
             counts["images"] += 1
             counts["boxes"] += len(lines)
@@ -178,7 +228,7 @@ def write_data_yaml(species: dict, output_dir: Path, data_yaml_path: Path) -> No
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--dataset-root", required=True, help="Racine du dataset SFISHTRACK (contient annotations/, frames/, ...)")
+    parser.add_argument("--dataset-root", required=True, help="Dossier SFISHTRACK/ extrait (contient Annotations/, Frames/, ...)")
     parser.add_argument("--species-config", default="configs/species.yaml", help="Classes YOLO (défaut: configs/species.yaml)")
     parser.add_argument("--species-map", default="configs/sfishtrack_species_map.yaml", help="Mapping catégorie COCO -> classe species.yaml")
     parser.add_argument("--output", default="data/sfishtrack", help="Dossier de sortie YOLO (défaut: data/sfishtrack)")
@@ -200,7 +250,7 @@ def main():
 
     print(f"{counts['videos']} vidéo(s), {counts['images']} image(s), {counts['boxes']} boîte(s) -> {output_dir}")
     if counts["missing_image_file"]:
-        print(f"Avertissement : {counts['missing_image_file']} frame(s) référencée(s) dans un annotations/*.json mais introuvable(s) sur disque.")
+        print(f"Avertissement : {counts['missing_image_file']} frame(s) référencée(s) dans un Annotations/*.json mais introuvable(s) sur disque.")
     if counts["missing_bbox_field"]:
         print(f"Avertissement : {counts['missing_bbox_field']} annotation(s) sans champ 'bbox', ignorée(s).")
     print(f"data.yaml écrit -> {args.data_yaml}")

@@ -1,18 +1,18 @@
 # Correspondance entre les noms de catégories COCO de SFISHTRACK et les
 # classes YOLO de configs/species.yaml.
 #
-# Selon la description reçue le 2026-08-12, les annotations SFISHTRACK
-# n'ont actuellement qu'UNE seule classe ("fish", pas d'espèce) — donc tout
-# mappe vers "poisson" (classe parente, 0) pour l'instant. Le nom COCO exact
-# ("fish", "Fish", autre) n'est PAS confirmé (le zip n'a pas encore pu être
-# téléchargé, cf. conversation) : lancer
-#   python src/convert_sfishtrack.py --dataset-root <chemin> --check-only
-# dès que possible pour voir le(s) nom(s) réel(s) et corriger la ligne
-# ci-dessous si besoin. Si SFISHTRACK s'avère finalement multi-espèces,
-# remplacer/compléter cette entrée par un mapping par espèce.
+# Confirmé le 2026-08-13 en inspectant les 54 fichiers réels
+# (data/external/sfishtrack/SFISHTRACK/Annotations/video*.json) : une seule
+# catégorie COCO par fichier, pas de distinction par espèce nulle part.
+# Nommage incohérent selon le fichier : 53/54 utilisent "object", un seul
+# (video001) utilise "fish" à la place (même sens) — les deux sont mappés
+# ici pour ne perdre aucune annotation. Si un futur export SFISHTRACK
+# ajoute des catégories par espèce, compléter/remplacer ces entrées en
+# conséquence (relancer --check-only pour voir les nouveaux noms).
 #
 # Format : nom_categorie_coco: nom_classe_species_yaml
 # (nom_classe_species_yaml doit être une valeur de configs/species.yaml
 # names: — sinon convert_sfishtrack.py l'ignore avec un avertissement)
 
+object: poisson
 fish: poisson
