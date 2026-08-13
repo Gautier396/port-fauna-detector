@@ -6,8 +6,13 @@ Choix par défaut, documentés plutôt qu'arbitraires :
     justifier `yolov8s` sans risque excessif de surapprentissage ; passer à
     `yolov8m`/`l` est raisonnable si la capacité s'avère limitante en
     pratique (mAP qui plafonne bien avant que la validation ne stagne).
-  - `--patience 20` (arrêt anticipé) : pas d'intérêt à épuiser `--epochs`
-    si la validation stagne.
+  - `--epochs 200` / `--patience 20` : le plafond n'a quasiment aucun coût
+    grâce à l'arrêt anticipé — si la validation plafonne avant, l'entraînement
+    s'arrête tout seul (patience) sans consommer les époques restantes.
+    Autant mettre `--epochs` haut par défaut plutôt que risquer de couper
+    un entraînement qui progressait encore, surtout sur un jeu aussi
+    volumineux que SFISHTRACK (23 233 images) où la dynamique de
+    convergence par époque n'a pas encore été observée en pratique.
   - `--batch -1` (auto) : ultralytics choisit la taille de batch occupant
     ~60% de la VRAM disponible plutôt qu'une valeur arbitraire.
   - seed fixé (`--seed 42`) : reproductibilité.
@@ -74,7 +79,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data", default="configs/data_sfishtrack.yaml", help="data.yaml Ultralytics (défaut: configs/data_sfishtrack.yaml)")
     parser.add_argument("--model", default="yolov8s.pt", help="Poids de départ (défaut: yolov8s.pt, pré-entraîné COCO)")
-    parser.add_argument("--epochs", type=int, default=100, help="Nombre d'époques max (défaut: 100)")
+    parser.add_argument("--epochs", type=int, default=200, help="Nombre d'époques max (défaut: 200, coupé plus tôt par --patience si la validation plafonne avant)")
     parser.add_argument("--imgsz", type=int, default=640, help="Taille d'image (défaut: 640)")
     parser.add_argument("--batch", type=int, default=-1, help="Taille de batch, -1 = auto ~60%% VRAM (défaut: -1)")
     parser.add_argument("--patience", type=int, default=20, help="Arrêt anticipé si la validation stagne N époques (défaut: 20)")
