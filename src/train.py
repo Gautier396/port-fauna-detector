@@ -44,6 +44,10 @@ from pathlib import Path
 # lui-même ; à définir avant l'import de torch/ultralytics.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
+import nn.register  # noqa: E402,F401 -- effet de bord (enregistre EMC/GLSA/LSHDetect pour
+# configs/bgle_yolo.yaml) ; sans effet sur les modèles standard (yolov8s.pt etc.). Import
+# relatif au dossier de train.py (src/), pas "src.nn" -- ce script est toujours lancé via
+# `python src/train.py` depuis la racine du repo, qui met src/ (pas la racine) sur sys.path.
 from ultralytics import YOLO  # noqa: E402
 
 

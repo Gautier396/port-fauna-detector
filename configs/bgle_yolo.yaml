@@ -1,0 +1,57 @@
+# Réimplémentation "best-effort" de BGLE-YOLO (Zhang et al. 2025) sur la
+# base de yolov8.yaml (ultralytics) -- cf. src/nn/bgle_modules.py pour les
+# détails et limites de cette reconstruction (papier sans code public).
+#
+# EMC (backbone) et GLSA (neck) sont des modules à canaux préservés (in=out),
+# insérés comme couches supplémentaires après les blocs C2f existants --
+# aucune modification des dimensions de canal ailleurs dans le YAML.
+# LSHDetect remplace Detect en tête (poids partagés sur la branche boîte,
+# séparés sur la branche classe, cf. src/nn/bgle_modules.py::LSHDetect).
+
+nc: 1  # poisson (classe unique, cf. configs/data_sfishtrack.yaml)
+scales:
+  s: [0.33, 0.50, 1024]
+
+backbone:
+  # Canaux réels (échelle 's', width=0.50) déterminés empiriquement via des
+  # hooks forward sur un yolov8s.yaml stock, pas devinés -- EMC/GLSA ne
+  # sont pas dans base_modules d'ultralytics donc pas d'auto-scaling par
+  # `width` pour leurs args : les valeurs ci-dessous sont déjà les valeurs
+  # runtime, pas les valeurs "brutes" (x2) qu'on voit sur les Conv/C2f
+  # voisins.
+  - [-1, 1, Conv, [64, 3, 2]]        # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]]       # 1-P2/4
+  - [-1, 3, C2f, [128, True]]        # 2
+  - [-1, 1, EMC, [64]]                # 3
+  - [-1, 1, Conv, [256, 3, 2]]       # 4-P3/8
+  - [-1, 6, C2f, [256, True]]        # 5
+  - [-1, 1, EMC, [128]]               # 6
+  - [-1, 1, Conv, [512, 3, 2]]       # 7-P4/16
+  - [-1, 6, C2f, [512, True]]        # 8
+  - [-1, 1, EMC, [256]]               # 9
+  - [-1, 1, Conv, [1024, 3, 2]]      # 10-P5/32
+  - [-1, 3, C2f, [1024, True]]       # 11
+  - [-1, 1, SPPF, [1024, 5]]         # 12
+
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 13
+  - [[-1, 9], 1, Concat, [1]]                    # 14 cat backbone P4 (EMC output)
+  - [-1, 3, C2f, [512]]                          # 15
+  - [-1, 1, GLSA, [256]]                          # 16
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 17
+  - [[-1, 6], 1, Concat, [1]]                    # 18 cat backbone P3 (EMC output)
+  - [-1, 3, C2f, [256]]                          # 19 (P3/8-small)
+  - [-1, 1, GLSA, [128]]                          # 20
+
+  - [-1, 1, Conv, [256, 3, 2]]                   # 21
+  - [[-1, 16], 1, Concat, [1]]                    # 22 cat head P4 (GLSA output)
+  - [-1, 3, C2f, [512]]                          # 23 (P4/16-medium)
+  - [-1, 1, GLSA, [256]]                          # 24
+
+  - [-1, 1, Conv, [512, 3, 2]]                   # 25
+  - [[-1, 12], 1, Concat, [1]]                    # 26 cat SPPF output
+  - [-1, 3, C2f, [1024]]                         # 27 (P5/32-large)
+  - [-1, 1, GLSA, [512]]                          # 28
+
+  - [[20, 24, 28], 1, LSHDetect, [nc]]           # LSHDetect(P3, P4, P5) -- ch auto-injecté, cf. src/nn/register.py
