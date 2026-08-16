@@ -62,6 +62,8 @@ def run_training(
     device: str,
     run_name: str,
     project_dir: Path,
+    fraction: float = 1.0,
+    workers: int = 8,
 ) -> tuple[YOLO, Path]:
     model = YOLO(model_name)
     model.train(
@@ -72,6 +74,8 @@ def run_training(
         patience=patience,
         seed=seed,
         device=device,
+        fraction=fraction,
+        workers=workers,
         # ultralytics only honors `project` as given if it's absolute — a relative
         # path gets silently prefixed with the global runs_dir setting instead
         # (ultralytics/cfg/__init__.py:get_save_dir), landing outside this repo.
@@ -92,6 +96,8 @@ def main():
     parser.add_argument("--batch", type=int, default=-1, help="Taille de batch, -1 = auto ~60%% VRAM (défaut: -1)")
     parser.add_argument("--patience", type=int, default=100, help="Arrêt anticipé si la validation stagne N époques (défaut: 100 -- cf. docstring, un patience trop bas coupe avant que le LR schedule ait assez décru)")
     parser.add_argument("--seed", type=int, default=42, help="Graine aléatoire (défaut: 42)")
+    parser.add_argument("--fraction", type=float, default=1.0, help="Fraction du train set à utiliser, pour un test rapide (défaut: 1.0 = tout)")
+    parser.add_argument("--workers", type=int, default=8, help="Workers de chargement de données en parallèle (défaut: 8 -- baisser si RAM système limitée, cf. Points ouverts)")
     parser.add_argument("--device", default=None, help="Device (défaut: 0 si CUDA disponible, sinon cpu)")
     parser.add_argument("--name", required=True, help="Nom du run (dossier de sortie + nom du modèle final)")
     parser.add_argument("--project-dir", default="outputs/training_runs", help="Dossier racine des runs (défaut: outputs/training_runs)")
@@ -114,6 +120,8 @@ def main():
         device=device,
         run_name=args.name,
         project_dir=Path(args.project_dir),
+        fraction=args.fraction,
+        workers=args.workers,
     )
 
     best_pt = run_dir / "weights" / "best.pt"
