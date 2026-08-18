@@ -8,27 +8,23 @@ Puis ouvrir l'URL locale affichée (http://127.0.0.1:7860 par défaut).
 """
 import os
 import sys
-import types
+from pathlib import Path
 
 # Conflit OpenMP connu sur cette machine Windows/Anaconda (cf. src/train.py) —
 # à définir avant l'import de torch/ultralytics.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
-# Un paquet PyPI sans rapport ("nn", une lib TensorFlow orpheline sur cette
-# machine, cassée par une incompatibilité Keras -- rien dans ce projet n'en
-# dépend, absent de requirements.txt) se fait importer de façon intermittente
-# pendant le dépicklage d'un modèle .pt, uniquement quand ça arrive dans un
-# thread worker de Gradio (reproduit et confirmé : le chargement réussit hors
-# thread, ou quand "nn" est désinstallé). Réapparaît parfois tout seul sur
-# cette machine (mécanisme non identifié, probablement un auto-install
-# d'ultralytics) donc le désinstaller ne suffit pas durablement -- on
-# neutralise l'import lui-même : si quelque chose fait `import nn` plus tard,
-# Python trouvera ce module vide déjà en cache et n'ira jamais chercher le
-# vrai paquet cassé sur le disque. Confirmé que le chargement du modèle n'a
-# jamais réellement besoin de "nn" (chargement OK quand il est absent).
-sys.modules.setdefault("nn", types.ModuleType("nn"))
-
-from pathlib import Path
+# models/*.pt peut être un checkpoint BGLE-YOLO (cf. src/nn/), dont les
+# classes custom sont picklées sous le chemin "nn.bgle_modules.*" -- train.py
+# tourne depuis src/ où "nn" résout naturellement vers src/nn/, mais app.py
+# tourne depuis la racine du projet, donc "nn" doit être ajouté explicitement
+# ici pour résoudre pareil, sinon le dépicklage échoue (soit en trouvant le
+# mauvais "nn" -- un paquet PyPI sans rapport, cassé, installé sur cette
+# machine -- soit en ne trouvant rien du tout). Ajouter src/ en tête de
+# sys.path avant tout, puis enregistrer EMC/GLSA/LSHDetect comme le fait
+# train.py, pour que "nn" résolve correctement quel que soit le modèle chargé.
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+import nn.register  # noqa: E402,F401 -- effet de bord (cf. commentaire ci-dessus)
 
 import cv2
 import gradio as gr
