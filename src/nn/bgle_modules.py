@@ -198,6 +198,24 @@ class LSHBranch(nn.Module):
         return self.proj(x)
 
 
+class _AlignedSharedBox(nn.Module):
+    """Wrapper autour d'UNE branche box partagée entre échelles : aligne
+    d'abord les canaux de l'échelle (différents pour P3/P4/P5 dans une FPN
+    standard) vers le canal commun de la branche partagée via une conv 1x1,
+    puis appelle cette branche. Nécessaire pour un partage de poids réel
+    (cf. bug corrigé dans LSHDetect.__init__ ci-dessous) : sans cet
+    alignement, réutiliser directement le même LSHBranch à travers des
+    échelles de canaux différents est impossible (mismatch de shape)."""
+
+    def __init__(self, c_in: int, c_common: int, shared_branch: "LSHBranch"):
+        super().__init__()
+        self.align = nn.Conv2d(c_in, c_common, 1) if c_in != c_common else nn.Identity()
+        self.shared = shared_branch
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.shared(self.align(x))
+
+
 class LSHDetect(Detect):
     """Tête de détection "Lightweight Shared Head" (LSH) : mêmes
     branches box (cv2) / classe (cv3) que Detect, mais construites avec
@@ -210,24 +228,36 @@ class LSHDetect(Detect):
     réécrit ci-dessous car la version de Detect indexe cv2[i][-1]/cv3[i][-1]
     en supposant un nn.Sequential (comme dans Detect standard), alors que
     LSHBranch est un nn.Module avec un attribut .proj nommé, pas
-    subscriptable de la même façon."""
+    subscriptable de la même façon.
+
+    Bug corrigé (2026-08-18, avant le premier vrai entraînement complet) :
+    la version précédente ne réutilisait `shared_box` que pour l'échelle
+    dont les canaux d'entrée coïncidaient par hasard avec `ch[0]` (P3 avec
+    `configs/bgle_yolo.yaml`, qui a ch=(128,256,512)) -- P4 et P5
+    recevaient chacun leur PROPRE LSHBranch non partagée, donc aucun
+    partage réel de poids n'avait lieu sur 2 des 3 échelles malgré ce que
+    disait ce docstring. Fix : un unique LSHBranch(c2, c2, ...) partagé,
+    précédé pour chaque échelle d'une petite conv 1x1 d'alignement de
+    canaux (`_AlignedSharedBox`) -- le partage porte maintenant sur les
+    poids DEConv+GroupNorm+proj eux-mêmes, à travers les 3 échelles."""
 
     def __init__(self, nc: int = 80, ch: tuple = ()):
         super().__init__(nc, ch=ch)
         c2 = max((16, ch[0] // 4, self.reg_max * 4))
         c3 = max(ch[0], min(self.nc, 100))
 
-        shared_box = LSHBranch(ch[0], c2, 4 * self.reg_max)
-        self.cv2 = nn.ModuleList(
-            shared_box if x == ch[0] else LSHBranch(x, c2, 4 * self.reg_max) for x in ch
-        )
+        shared_box = LSHBranch(c2, c2, 4 * self.reg_max)
+        self.cv2 = nn.ModuleList(_AlignedSharedBox(x, c2, shared_box) for x in ch)
         self.cv3 = nn.ModuleList(LSHBranch(x, c3, self.nc) for x in ch)
 
     def bias_init(self):
         """Équivalent de Detect.bias_init() adapté à LSHBranch.proj (pas de
-        Sequential à indexer par [-1])."""
+        Sequential à indexer par [-1]) -- `a` est un _AlignedSharedBox ici,
+        d'où `a.shared.proj` (la même instance partagée à chaque itération,
+        donc les 3 assignations à la branche box sont redondantes mais sans
+        effet de bord)."""
         import math
 
         for a, b, s in zip(self.cv2, self.cv3, self.stride):
-            a.proj.bias.data[:] = 2.0  # box
+            a.shared.proj.bias.data[:] = 2.0  # box
             b.proj.bias.data[: self.nc] = math.log(5 / self.nc / (640 / s) ** 2)  # cls
