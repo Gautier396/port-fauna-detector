@@ -44,23 +44,14 @@ def latest_model_path() -> Path:
     return candidates[0]
 
 
-def run_detection(video_path: str, conf: float, confirm_frames: int, confirm_conf: float):
+def run_detection(video_path: str, conf: float):
     """Générateur : une frame annotée à la fois pendant le traitement, puis la vidéo
     complète une fois terminé (gr.skip() laisse les sorties non concernées inchangées).
 
     Utilise model.track() (ByteTrack, comme src/track.py) plutôt que
     model.predict() : suivre chaque poisson d'une frame à l'autre est ce qui
-    permet à la fois le compteur (compter les IDs distincts, pas les boîtes
-    par frame — sinon un même poisson vu 50 frames compterait 50 fois) et la
-    confirmation temporelle ci-dessous.
-
-    Confirmation temporelle : une piste n'est dessinée qu'après avoir été
-    vue au moins `confirm_frames` fois DE SUITE avec une confiance >=
-    `confirm_conf` — évite qu'une fausse détection isolée (un seul mauvais
-    frame) fasse clignoter une boîte à l'écran. Dès qu'une frame retombe
-    sous `confirm_conf`, le compteur de la piste se réinitialise (pas de
-    moyenne glissante qui laisserait passer une suite de détections
-    fluctuantes)."""
+    permet le compteur (compter les IDs distincts, pas les boîtes par frame —
+    sinon un même poisson vu 50 frames compterait 50 fois)."""
     if not video_path:
         yield gr.skip(), gr.skip(), "Dépose une vidéo pour commencer."
         return
@@ -83,9 +74,7 @@ def run_detection(video_path: str, conf: float, confirm_frames: int, confirm_con
     output_path = str(OUTPUT_DIR / f"{Path(video_path).stem}_annotated.mp4")
     writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
 
-    streak: dict[int, int] = {}       # track_id -> frames consécutives >= confirm_conf
-    confirmed: set[int] = set()       # track_ids actuellement affichées
-    seen_confirmed: set[int] = set()  # tous les track_ids confirmés depuis le début (compteur)
+    seen: set[int] = set()  # tous les track_ids vus depuis le début (compteur)
 
     n = 0
     while True:
@@ -101,18 +90,7 @@ def run_detection(video_path: str, conf: float, confirm_frames: int, confirm_con
             for box in result.boxes:
                 track_id = int(box.id.item())
                 confidence = float(box.conf.item())
-
-                if confidence >= confirm_conf:
-                    streak[track_id] = streak.get(track_id, 0) + 1
-                else:
-                    streak[track_id] = 0
-
-                if streak[track_id] >= confirm_frames:
-                    confirmed.add(track_id)
-                    seen_confirmed.add(track_id)
-
-                if track_id not in confirmed:
-                    continue
+                seen.add(track_id)
 
                 cls_id = int(box.cls.item())
                 class_name = result.names[cls_id]
@@ -124,18 +102,18 @@ def run_detection(video_path: str, conf: float, confirm_frames: int, confirm_con
                 )
 
         cv2.putText(
-            annotated, f"Poissons : {len(seen_confirmed)}", (20, 40),
+            annotated, f"Poissons : {len(seen)}", (20, 40),
             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2,
         )
 
         writer.write(annotated)
         annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
         total_str = f"/{total_frames}" if total_frames else ""
-        yield annotated_rgb, gr.skip(), f"Modèle : {model_path.name} — frame {n}{total_str} — {len(seen_confirmed)} poisson(s) confirmé(s)"
+        yield annotated_rgb, gr.skip(), f"Modèle : {model_path.name} — frame {n}{total_str} — {len(seen)} poisson(s)"
 
     cap.release()
     writer.release()
-    yield gr.skip(), output_path, f"Modèle : {model_path.name} — {n} frames traitées, {len(seen_confirmed)} poisson(s) au total -> {output_path}"
+    yield gr.skip(), output_path, f"Modèle : {model_path.name} — {n} frames traitées, {len(seen)} poisson(s) au total -> {output_path}"
 
 
 def build_interface() -> gr.Blocks:
@@ -155,20 +133,11 @@ def build_interface() -> gr.Blocks:
                 live_frame = gr.Image(label="Détection en direct", type="numpy")
                 video_out = gr.Video(label="Vidéo annotée complète")
         conf_slider = gr.Slider(0.05, 0.9, value=0.25, step=0.05, label="Seuil de confiance")
-        with gr.Row():
-            confirm_frames_slider = gr.Slider(
-                1, 15, value=3, step=1, label="Frames de confirmation",
-                info="Nombre de frames consécutives requises avant d'afficher une boîte",
-            )
-            confirm_conf_slider = gr.Slider(
-                0.05, 0.95, value=0.3, step=0.05, label="Confiance de confirmation",
-                info="Confiance minimale à maintenir pendant ces frames (≥ seuil de confiance)",
-            )
         status = gr.Markdown("")
         run_btn = gr.Button("Lancer la détection", variant="primary")
         run_btn.click(
             fn=run_detection,
-            inputs=[video_in, conf_slider, confirm_frames_slider, confirm_conf_slider],
+            inputs=[video_in, conf_slider],
             outputs=[live_frame, video_out, status],
         )
 
