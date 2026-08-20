@@ -2,11 +2,13 @@
 
 [![CI](https://github.com/Gautier396/port-fauna-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/Gautier396/port-fauna-detector/actions/workflows/ci.yml)
 
-![Détection sur une frame réelle du dataset de validation](docs/demo.png)
+![Détection sur une vidéo de plongée réelle](docs/demo.png)
 
 Détection de poissons dans des vidéos de plongée GoPro filmées en
 Méditerranée, avec suivi multi-objet (ByteTrack) pour compter les individus
 distincts plutôt que les détections par frame.
+
+Vidéos et photos de plongée : Vincent Bardinal.
 
 Le projet a deux volets :
 
@@ -151,6 +153,9 @@ auteurs originaux, qui ne sont pas publics. Le jeu de données SFISHTRACK est
 utilisé conformément à sa publication (Sanchez et al., 2026, voir
 ci-dessus) ; se référer à sa source pour les conditions d'utilisation
 propres au dataset.
+
+Les vidéos et photos de plongée utilisées pour la démo et les tests
+(hors SFISHTRACK) sont de Vincent Bardinal, tous droits réservés.
 
 ## Points ouverts
 
