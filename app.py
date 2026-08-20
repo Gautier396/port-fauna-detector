@@ -7,23 +7,14 @@ Usage:
 Puis ouvrir l'URL locale affichée (http://127.0.0.1:7860 par défaut).
 """
 import os
-import sys
 from pathlib import Path
 
 # Conflit OpenMP connu sur cette machine Windows/Anaconda (cf. src/train.py) —
 # à définir avant l'import de torch/ultralytics.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
-# models/*.pt peut être un checkpoint BGLE-YOLO (cf. src/nn/), dont les
-# classes custom sont picklées sous le chemin "nn.bgle_modules.*" -- train.py
-# tourne depuis src/ où "nn" résout naturellement vers src/nn/, mais app.py
-# tourne depuis la racine du projet. "nn" doit donc être ajouté explicitement
-# au sys.path ici pour résoudre pareil (sinon le dépicklage échoue, ou pire,
-# résout vers un paquet PyPI "nn" sans rapport si un est installé), puis
-# enregistrer EMC/GLSA/LSHDetect comme le fait train.py, pour que "nn"
-# résolve correctement quel que soit le modèle chargé.
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-import nn.register  # noqa: E402,F401 -- effet de bord (cf. commentaire ci-dessus)
+import src.nn.register  # noqa: E402,F401 -- effet de bord, enregistre EMC/GLSA/LSHDetect
+# pour les checkpoints BGLE-YOLO (cf. src/nn/) ; sans effet sur les modèles standard.
 
 import cv2
 import gradio as gr

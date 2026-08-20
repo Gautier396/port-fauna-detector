@@ -1,0 +1,41 @@
+# Nomenclature d'espèces cibles, vision long terme du projet. Document de
+# référence, PAS une config chargée par le pipeline (cf. configs/species.yaml
+# pour la config active, réduite aux classes réellement peuplées). Provisoire,
+# à valider avec le Parc/les plongeurs.
+#
+# Recentrée sur les poissons (+ oursins, exception gardée explicitement) ;
+# céphalopodes, crustacés, autres échinodermes, mollusques et cnidaires sont
+# hors périmètre. Aucune de ces classes n'a de source de données active :
+# SFISHTRACK (seule source actuelle) est mono-classe.
+names:
+  0: poisson                     # classe parente générique
+
+  # Poissons
+  1: dorade_royale                # Sparus aurata
+  2: bar_europeen                 # Dicentrarchus labrax (loup)
+  3: mulet                        # Mugil cephalus
+  4: sar_commun                   # Diplodus sargus
+  5: girelle                      # Coris julis
+  6: rascasse                     # Scorpaena scrofa
+  7: congre                       # Conger conger
+  8: murene                       # Muraena helena
+  9: saupe                        # Sarpa salpa
+  10: blennie                     # Blenniidae (famille)
+  11: gobie                       # Gobiidae (famille)
+  12: hippocampe                  # Hippocampus hippocampus / H. guttulatus
+  13: castagnole                  # Chromis chromis
+  14: oblade                      # Oblada melanura
+  15: bogue                       # Boops boops
+  16: sar_museau_noir             # Diplodus vulgaris
+  17: sparaillon                  # Diplodus annularis
+  18: serran_chevrette            # Serranus cabrilla
+  19: serran_ecriture             # Serranus scriba
+  20: atherine                    # Atherina hepsetus / A. boyeri
+  21: rouget                      # Mullus surmuletus / M. barbatus
+  22: chinchard                   # Trachurus trachurus
+  23: vive                        # Trachinus draco
+  24: sole                        # Solea solea
+
+  # Échinodermes (exception gardée explicitement, hors périmètre "poissons")
+  25: oursin_violet               # Paracentrotus lividus
+  26: oursin_noir                 # Arbacia lixula

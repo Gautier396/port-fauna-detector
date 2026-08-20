@@ -1,5 +1,9 @@
 # Détecteur de faune marine du port
 
+[![CI](https://github.com/Gautier396/port-fauna-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/Gautier396/port-fauna-detector/actions/workflows/ci.yml)
+
+![Détection sur une frame réelle du dataset de validation](docs/demo.png)
+
 Détection de poissons dans des vidéos de plongée GoPro filmées en
 Méditerranée, avec suivi multi-objet (ByteTrack) pour compter les individus
 distincts plutôt que les détections par frame.
@@ -96,7 +100,12 @@ src/
 configs/
   bgle_yolo.yaml           assemblage du modèle BGLE-YOLO
   data_sfishtrack.yaml      config ultralytics générée par convert_sfishtrack.py
-  species.yaml              nomenclature des espèces cibles (vision long terme)
+  species.yaml              nomenclature active (classes réellement peuplées)
+docs/
+  species_roadmap.yaml      nomenclature cible à 27 classes (vision long terme, non chargée par le code)
+  demo.png                  image utilisée en tête de ce README
+tests/
+  test_smoke.py             tests sans dataset ni GPU (CI)
 app.py                      démo Gradio : détection + suivi + comptage (port 7860)
 view_labels.py               revue des labels générés (port 7862)
 ```
@@ -114,14 +123,17 @@ pip install -r requirements.txt
 python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/SFISHTRACK --output data/sfishtrack
 
 # Entraînement — benchmark YOLOv8
-python src/train.py --data configs/data_sfishtrack.yaml --model yolov8s.pt --name portfauna_v3
+python -m src.train --data configs/data_sfishtrack.yaml --model yolov8s.pt --name portfauna_v3
 
 # Entraînement — BGLE-YOLO
-python src/train.py --data configs/data_sfishtrack.yaml --model configs/bgle_yolo.yaml --name portfauna_bgle
-python src/train.py --name portfauna_bgle --resume   # reprise après interruption
+python -m src.train --data configs/data_sfishtrack.yaml --model configs/bgle_yolo.yaml --name portfauna_bgle
+python -m src.train --name portfauna_bgle --resume   # reprise après interruption
 
 # Démo glisser-déposer
 python app.py
+
+# Tests (rapides, sans dataset ni GPU)
+pytest tests/
 ```
 
 ## Licence
@@ -142,9 +154,9 @@ propres au dataset.
 
 ## Points ouverts
 
-- La nomenclature d'espèces (`configs/species.yaml`) reste provisoire, sans
-  source de données active pour l'instant : SFISHTRACK est mono-classe.
 - BGLE-YOLO n'a pas terminé son schedule d'entraînement complet.
+- La nomenclature cible à 27 classes (`docs/species_roadmap.yaml`) n'a
+  aucune source de données active pour l'instant : SFISHTRACK est mono-classe.
 
 ## Pistes futures
 
@@ -157,3 +169,10 @@ plausible), et une file de vérification manuelle pour les détections à
 confiance trop faible pour être enregistrées automatiquement. Non
 implémentée actuellement ; à reprendre si le comptage inter-plongées devient
 un besoin réel.
+
+**Géolocalisation par observation** : besoin identifié tôt dans le projet
+(GPS/EXIF par détection, pour situer chaque observation dans le port plutôt
+que seulement par vidéo) puis mis de côté, expérimental. Naturellement liée
+au registre d'individus ci-dessus si les deux sont repris ensemble — sans
+GPS, un individu ne peut être situé que par la vidéo/le timestamp qui l'a
+capturé, pas par sa position réelle.

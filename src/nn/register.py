@@ -25,14 +25,28 @@ Usage :
     import src.nn.register  # noqa: F401 -- effet de bord, à importer avant YOLO(...)
 """
 import inspect
+import sys
+import types
 
 import ultralytics.nn.tasks as _tasks
 
+from . import bgle_modules
 from .bgle_modules import EMC, GLSA, LSHDetect
 
 _tasks.EMC = EMC
 _tasks.GLSA = GLSA
 _tasks.LSHDetect = LSHDetect
+
+# Compat pour les checkpoints entraînés avant que ce module ne soit importé
+# de façon cohérente en "src.nn.*" : torch.load dépickle les classes custom
+# sous le chemin de module qui était effectif au moment de l'entraînement
+# ("nn.bgle_modules.*" pour les checkpoints antérieurs). Alias explicite
+# plutôt que de dépendre d'un sys.path bricolé -- retirer une fois qu'aucun
+# checkpoint existant ne référence plus "nn.*" (torch.load avertit sinon
+# avec un ModuleNotFoundError).
+sys.modules["nn"] = types.ModuleType("nn")
+sys.modules["nn"].bgle_modules = bgle_modules
+sys.modules["nn.bgle_modules"] = bgle_modules
 
 
 def _patch_parse_model_for_lshdetect() -> None:
