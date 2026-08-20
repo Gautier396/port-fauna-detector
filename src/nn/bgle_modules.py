@@ -1,5 +1,5 @@
 """Modules custom pour une réimplémentation "best-effort" de BGLE-YOLO
-(Zhang et al., "BGLE-YOLO: A Lightweight Model for Underwater
+(Zhao et al., "BGLE-YOLO: A Lightweight Model for Underwater
 Bio-Detection", 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC11902696/).
 
 Reconstruction à partir de la description du papier, pas du code original

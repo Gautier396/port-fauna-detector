@@ -32,9 +32,24 @@ architecture, contrairement à YOLOv8 pré-entraîné sur COCO), et son
 entraînement s'est arrêté avant la fin du schedule de taux d'apprentissage
 prévu.
 
+## Démos vidéo
+
+BGLE-YOLO et YOLOv8 sur la même vidéo source :
+
+<video src="docs/demo-bgle.mp4" controls width="480"></video>
+<video src="docs/demo-yolov8.mp4" controls width="480"></video>
+
+Vidéo source : chaîne YouTube [UCLDsTtyfNNWudB6p48LfIMA](https://www.youtube.com/channel/UCLDsTtyfNNWudB6p48LfIMA).
+
+YOLOv8 sur une plongée réelle :
+
+<video src="docs/demo2-yolov8.mp4" controls width="480"></video>
+
+Vidéo source : Vincent Bardinal.
+
 ## BGLE-YOLO
 
-Reconstruction "best-effort" de l'architecture décrite dans Zhang et al.,
+Reconstruction "best-effort" de l'architecture décrite dans Zhao et al.,
 *"BGLE-YOLO: A Lightweight Model for Underwater Bio-Detection"* (2025) — les
 auteurs ne partagent pas leur code. L'implémentation ci-dessous suit l'esprit
 de chaque module décrit dans le papier (convolution multi-échelle, attention
@@ -105,7 +120,7 @@ configs/
   species.yaml              nomenclature active (classes réellement peuplées)
 docs/
   species_roadmap.yaml      nomenclature cible à 27 classes (vision long terme, non chargée par le code)
-  demo.png                  image utilisée en tête de ce README
+  demo.png, demo*.mp4       images/vidéos utilisées dans ce README (cf. Licence pour les crédits)
 tests/
   test_smoke.py             tests sans dataset ni GPU (CI)
 app.py                      démo Gradio : détection + suivi + comptage (port 7860)
@@ -148,14 +163,17 @@ disposition en réseau (y compris `app.py`) est soumise aux termes de cette
 licence, notamment l'obligation de rendre le code source disponible.
 
 BGLE-YOLO est une réimplémentation indépendante inspirée de la description
-publiée par Zhang et al. (2025) ; elle n'utilise ni le code ni les poids des
+publiée par Zhao et al. (2025) ; elle n'utilise ni le code ni les poids des
 auteurs originaux, qui ne sont pas publics. Le jeu de données SFISHTRACK est
 utilisé conformément à sa publication (Sanchez et al., 2026, voir
 ci-dessus) ; se référer à sa source pour les conditions d'utilisation
 propres au dataset.
 
-Les vidéos et photos de plongée utilisées pour la démo et les tests
-(hors SFISHTRACK) sont de Vincent Bardinal, tous droits réservés.
+Vidéos et photos utilisées pour la démo et les tests (hors SFISHTRACK) :
+Vincent Bardinal (image et vidéo de démo principales, `docs/demo.png`,
+`docs/demo2-yolov8.mp4`), tous droits réservés ; chaîne YouTube
+[UCLDsTtyfNNWudB6p48LfIMA](https://www.youtube.com/channel/UCLDsTtyfNNWudB6p48LfIMA)
+(`docs/demo-bgle.mp4`, `docs/demo-yolov8.mp4`), droits de l'auteur d'origine.
 
 ## Points ouverts
 
