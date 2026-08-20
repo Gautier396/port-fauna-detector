@@ -40,10 +40,9 @@ def run_detection(video_path: str, conf: float):
     """Générateur : une frame annotée à la fois pendant le traitement, puis la vidéo
     complète une fois terminé (gr.skip() laisse les sorties non concernées inchangées).
 
-    Utilise model.track() (ByteTrack) plutôt que model.predict() : suivre
-    chaque poisson d'une frame à l'autre est ce qui permet le compteur
-    (compter les IDs distincts, pas les boîtes par frame — sinon un même
-    poisson vu 50 frames compterait 50 fois)."""
+    Utilise model.track() (ByteTrack) plutôt que model.predict() : IDs
+    stables d'une frame à l'autre pour repérer visuellement un même poisson
+    pendant le suivi."""
     if not video_path:
         yield gr.skip(), gr.skip(), "Dépose une vidéo pour commencer."
         return
@@ -66,15 +65,16 @@ def run_detection(video_path: str, conf: float):
     output_path = str(OUTPUT_DIR / f"{Path(video_path).stem}_annotated.mp4")
     writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
 
-    seen: set[int] = set()  # tous les track_ids vus depuis le début (compteur)
-
     n = 0
     while True:
         ret, raw_frame = cap.read()
         if not ret:
             break
         frame = enhance_underwater(raw_frame)  # même correction que le dataset d'entraînement (src/preprocess.py)
-        result = model.track(frame, conf=conf, persist=True, verbose=False, device=DEVICE)[0]
+        result = model.track(
+            frame, conf=conf, persist=True, verbose=False, device=DEVICE,
+            quantize=16 if DEVICE != "cpu" else None,  # FP16 : ~1.4x plus rapide sur GPU, non supporté sur CPU
+        )[0]
         n += 1
 
         annotated = frame.copy()
@@ -82,7 +82,6 @@ def run_detection(video_path: str, conf: float):
             for box in result.boxes:
                 track_id = int(box.id.item())
                 confidence = float(box.conf.item())
-                seen.add(track_id)
 
                 cls_id = int(box.cls.item())
                 class_name = result.names[cls_id]
@@ -93,19 +92,14 @@ def run_detection(video_path: str, conf: float):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2,
                 )
 
-        cv2.putText(
-            annotated, f"Poissons : {len(seen)}", (20, 40),
-            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2,
-        )
-
         writer.write(annotated)
         annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
         total_str = f"/{total_frames}" if total_frames else ""
-        yield annotated_rgb, gr.skip(), f"Modèle : {model_path.name} ({DEVICE}) — frame {n}{total_str} — {len(seen)} poisson(s)"
+        yield annotated_rgb, gr.skip(), f"Modèle : {model_path.name} ({DEVICE}) — frame {n}{total_str}"
 
     cap.release()
     writer.release()
-    yield gr.skip(), output_path, f"Modèle : {model_path.name} ({DEVICE}) — {n} frames traitées, {len(seen)} poisson(s) au total -> {output_path}"
+    yield gr.skip(), output_path, f"Modèle : {model_path.name} ({DEVICE}) — {n} frames traitées -> {output_path}"
 
 
 def build_interface() -> gr.Blocks:

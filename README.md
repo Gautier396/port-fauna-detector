@@ -5,8 +5,8 @@
 ![Détection sur une vidéo de plongée réelle](docs/demo.png)
 
 Détection de poissons dans des vidéos de plongée GoPro filmées en
-Méditerranée, avec suivi multi-objet (ByteTrack) pour compter les individus
-distincts plutôt que les détections par frame.
+Méditerranée, avec suivi multi-objet (ByteTrack) pour des IDs stables d'une
+frame à l'autre.
 
 Vidéos et photos de plongée : Vincent Bardinal.
 
@@ -165,15 +165,21 @@ Les vidéos et photos de plongée utilisées pour la démo et les tests
 
 ## Pistes futures
 
-**Registre d'individus inter-vidéos** : au-delà du comptage par vidéo
-(actuel, via les IDs ByteTrack dans `app.py`), une piste explorée puis mise
-de côté consiste à dédupliquer les individus revus d'une plongée à l'autre —
-embedding visuel par crop détecté (ex. ResNet18), registre persistant avec
-appariement par similarité cosinus (restreint à une fenêtre temporelle
-plausible), et une file de vérification manuelle pour les détections à
-confiance trop faible pour être enregistrées automatiquement. Non
-implémentée actuellement ; à reprendre si le comptage inter-plongées devient
-un besoin réel.
+**Comptage de poissons** : `app.py` a eu un compteur par vidéo (agrégation
+des IDs ByteTrack distincts), retiré depuis. Un comptage brut d'IDs de
+tracking a une limite connue : un ID change si un poisson sort du cadre
+puis revient, gonflant artificiellement le compte — à prendre en compte
+dans une future implémentation plutôt que de recompter naïvement les IDs.
+
+**Registre d'individus inter-vidéos** : au-delà d'un comptage par vidéo,
+une piste explorée puis mise de côté consiste à dédupliquer les individus
+revus d'une plongée à l'autre — embedding visuel par crop détecté (ex.
+ResNet18), registre persistant avec appariement par similarité cosinus
+(restreint à une fenêtre temporelle plausible), et une file de vérification
+manuelle pour les détections à confiance trop faible pour être enregistrées
+automatiquement. Non implémentée actuellement ; à reprendre si le comptage
+inter-plongées devient un besoin réel (le même problème de fiabilité des
+IDs ByteTrack s'appliquerait au sein de chaque vidéo).
 
 **Géolocalisation par observation** : besoin identifié tôt dans le projet
 (GPS/EXIF par détection, pour situer chaque observation dans le port plutôt
