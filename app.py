@@ -18,6 +18,7 @@ import src.nn.register  # noqa: E402,F401 -- effet de bord, enregistre EMC/GLSA/
 
 import cv2
 import gradio as gr
+import torch
 from ultralytics import YOLO
 
 from src.preprocess import enhance_underwater
@@ -25,6 +26,7 @@ from src.preprocess import enhance_underwater
 PROJECT_ROOT = Path(__file__).parent
 MODELS_DIR = PROJECT_ROOT / "models"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "demo"
+DEVICE = "0" if torch.cuda.is_available() else "cpu"
 
 
 def latest_model_path() -> Path:
@@ -72,7 +74,7 @@ def run_detection(video_path: str, conf: float):
         if not ret:
             break
         frame = enhance_underwater(raw_frame)  # même correction que le dataset d'entraînement (src/preprocess.py)
-        result = model.track(frame, conf=conf, persist=True, verbose=False)[0]
+        result = model.track(frame, conf=conf, persist=True, verbose=False, device=DEVICE)[0]
         n += 1
 
         annotated = frame.copy()
@@ -99,11 +101,11 @@ def run_detection(video_path: str, conf: float):
         writer.write(annotated)
         annotated_rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
         total_str = f"/{total_frames}" if total_frames else ""
-        yield annotated_rgb, gr.skip(), f"Modèle : {model_path.name} — frame {n}{total_str} — {len(seen)} poisson(s)"
+        yield annotated_rgb, gr.skip(), f"Modèle : {model_path.name} ({DEVICE}) — frame {n}{total_str} — {len(seen)} poisson(s)"
 
     cap.release()
     writer.release()
-    yield gr.skip(), output_path, f"Modèle : {model_path.name} — {n} frames traitées, {len(seen)} poisson(s) au total -> {output_path}"
+    yield gr.skip(), output_path, f"Modèle : {model_path.name} ({DEVICE}) — {n} frames traitées, {len(seen)} poisson(s) au total -> {output_path}"
 
 
 def build_interface() -> gr.Blocks:
