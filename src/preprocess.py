@@ -7,18 +7,16 @@ turbidité/luminosité) est une source de variance que le modèle doit
 apprendre à ignorer plutôt qu'un signal utile — ce prétraitement la corrige
 en amont, une fois pour toutes.
 
-**CLAHE (amélioration de contraste) testée et abandonnée** : même à faible
-clipLimit, elle introduit un halo bleu-gris artificiel sur les arrière-plans
-flous (bokeh) très fréquents en macro sous-marine — confirmé visuellement
-sur plusieurs échantillons avant d'être retirée. Seule la balance des blancs
-est conservée.
+CLAHE (amélioration de contraste) a été écartée : même à faible clipLimit,
+elle introduit un halo bleu-gris sur les arrière-plans flous (bokeh),
+fréquents en macro sous-marine. Seule la balance des blancs est conservée.
 
 Appliqué aux deux points d'entrée des pixels dans le pipeline, pour que
 l'entraînement et l'inférence voient la même distribution de couleurs :
   - dataset d'entraînement : CLI ci-dessous, en place, idempotent (incrémental
     — ne retraite pas une image déjà marquée faite, sauf --force)
   - vidéo à l'inférence : `enhance_underwater()` importé et appliqué à
-    chaque frame dans track.py et app.py avant détection
+    chaque frame dans app.py avant détection
 
 Usage (bibliothèque) :
     from src.preprocess import enhance_underwater
@@ -44,12 +42,11 @@ def gray_world_white_balance(image: np.ndarray, max_gain: float = 1.5, strength_
 
     Nécessaire en pratique sur ce dataset : beaucoup de photos sont des
     macros au flash (sujet naturellement chaud/sombre, fond noir, pas de
-    vraie dominante eau) où une correction gray-world classique sur-corrige
-    et ajoute un cast bleu/violet artificiel qui n'existait pas (confirmé
-    visuellement avant d'intégrer cette version). `cast_strength` mesure la
-    dominante eau (B+G contre R) : ~0 sur une image déjà neutre ou à
-    dominante chaude (pas de correction), jusqu'à 1 sur une forte dominante
-    eau (correction pleine, plafonnée par `max_gain`).
+    vraie dominante eau), où une correction gray-world à force fixe
+    sur-corrige et ajoute un cast bleu/violet artificiel. `cast_strength`
+    mesure la dominante eau (B+G contre R) : ~0 sur une image déjà neutre ou
+    à dominante chaude (pas de correction), jusqu'à 1 sur une forte
+    dominante eau (correction pleine, plafonnée par `max_gain`).
     """
     img = image.astype(np.float32)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)

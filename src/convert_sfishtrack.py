@@ -2,8 +2,8 @@
 tracking multi-objet, une vidéo par fichier) en labels YOLO (bounding box),
 pour intégration dans le pipeline d'entraînement existant (configs/species.yaml).
 
-Structure réelle (racine passée via --dataset-root = dossier "SFISHTRACK/"
-extrait du zip) — vérifiée sur le vrai fichier le 2026-08-13 :
+Structure du dataset (racine passée via --dataset-root = dossier
+"SFISHTRACK/" extrait du zip) :
     SFISHTRACK/
       Videos/                    <- vidéos sources, pas utilisées ici (on part des frames)
       Frames/video_XXX/YYYYYY.png    <- ex. Frames/video_012/000000.png

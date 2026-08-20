@@ -1,37 +1,27 @@
 """Modules custom pour une réimplémentation "best-effort" de BGLE-YOLO
-(Zhang et al. 2025, "BGLE-YOLO: A Lightweight Model for Underwater
-Bio-Detection", https://pmc.ncbi.nlm.nih.gov/articles/PMC11902696/).
+(Zhang et al., "BGLE-YOLO: A Lightweight Model for Underwater
+Bio-Detection", 2025, https://pmc.ncbi.nlm.nih.gov/articles/PMC11902696/).
 
-**Reconstruction à partir de la description du papier, PAS du code
-original** — les auteurs déclarent explicitement ne pas pouvoir partager
-leur code ("The code cannot be shared due to specific reasons"). Cette
-implémentation est une interprétation fidèle à l'esprit de chaque module
-(mêmes opérations de haut niveau : conv multi-échelle, attention
-globale/locale, convolution à différences reparamétrée) mais PAS une
-reproduction byte-perfect — certains détails (ratios de canaux exacts,
-nombre de répétitions, placement précis dans le réseau) ne sont pas
-donnés dans le résumé du papier disponible et ont été choisis de façon
-raisonnable. Décision explicite de l'utilisateur (2026-08-14) de tenter
-cette voie malgré l'absence de poids pré-entraînés (entraînement from
-scratch) et le risque de moins bien performer que yolov8s/yolov8m
-pré-entraînés COCO déjà testés sur ce projet (portfauna_v3/v3m).
+Reconstruction à partir de la description du papier, pas du code original
+(non publié) : interprétation fidèle à l'esprit de chaque module (conv
+multi-échelle, attention globale/locale, convolution à différences
+reparamétrée), mais pas une reproduction byte-perfect — certains détails
+(ratios de canaux exacts, nombre de répétitions, placement précis dans le
+réseau) ne sont pas donnés dans le papier et ont été choisis de façon
+raisonnable.
 
-Trois modules, chacun CONSERVE le nombre de canaux (in == out) par choix
-de conception : ça permet de les insérer dans un YAML de modèle
-ultralytics sans avoir à patcher `parse_model()` (qui infère normalement
-les canaux de sortie automatiquement pour les modules connus d'ultralytics
-seulement) -- le calcul de canaux par défaut d'ultralytics pour un module
-inconnu (`c2 = ch[f]`, cf. ultralytics/nn/tasks.py::parse_model) devient
-alors correct automatiquement. Les changements de résolution/canaux
-restent gérés par les Conv/Concat/Upsample standard du YAML autour de ces
-blocs.
+Les trois modules conservent le nombre de canaux (in == out) : ça permet de
+les insérer dans un YAML de modèle ultralytics sans patcher `parse_model()`,
+dont le calcul par défaut pour un module inconnu (`c2 = ch[f]`) devient
+alors correct automatiquement. Les changements de résolution/canaux restent
+gérés par les Conv/Concat/Upsample standard du YAML autour de ces blocs.
 
   - EMC   : Efficient Multi-Scale Convolution (backbone)
-  - GLSA  : Global-to-Local Spatial Attention (composant du module BIG du
+  - GLSA  : Global-to-Local Spatial Aggregation (composant du module BIG du
             papier, neck) -- la fusion BiFPN pondérée elle-même est gérée
             dans le YAML via des Conv 1x1 + additions pondérées standard,
-            pas un module dédié séparé (pas assez de détail dans le papier
-            pour reproduire fidèlement leur variante de BiFPN).
+            faute de détail suffisant dans le papier pour reproduire leur
+            variante de BiFPN.
   - LSHDetect : tête de détection légère (DEConv + GroupNorm), sous-classe
             de ultralytics.nn.modules.head.Detect pour rester compatible
             avec la loss/décodage DFL existants -- seuls les blocs conv
@@ -140,25 +130,16 @@ class DEConv(nn.Module):
         self.act = nn.SiLU()
 
     def _effective_kernel(self) -> torch.Tensor:
-        """Version corrigée après un entraînement réel (portfauna_bgle,
-        2026-08-14) qui a divergé (pertes NaN, effondrement du rappel) --
-        cf. mémoire projet. Cause identifiée : la version précédente
-        sommait 5 variantes du même poids à pleine échelle SANS
-        atténuation. Recalculé à la main pour une case "générique" du
-        noyau : effectif = 5×w[i,j] − w[flip(i,j)], et pire pour la case
-        centrale qui accumule 3 termes de soustraction (somme du noyau
-        entier + somme de la ligne + somme de la colonne) simultanément --
-        largement plus fort qu'une conv standard dès l'initialisation, et
-        sans garde-fou si les poids dérivent pendant l'entraînement.
-        Empilé sur 2 DEConv par branche × 3 échelles, cette instabilité
-        pouvait s'amplifier jusqu'à diverger.
-
-        Fix : exprimer chaque terme de différence comme une PERTURBATION
-        (nulle partout sauf aux positions qu'elle affecte réellement) et
-        l'atténuer par `theta` (0.2 par défaut) avant de l'ajouter au poids
-        "vanille" -- celui-ci reste à l'échelle normale d'une conv standard,
-        les différences n'agissent plus que comme une correction de detail
-        mineure, pas un second signal de même force."""
+        """Combine le poids de base et les 4 termes de différence en un seul
+        noyau. Sommer les 5 variantes à pleine échelle sans atténuation rend
+        le noyau effectif ~2.7x plus fort qu'une conv standard dès
+        l'initialisation (la case centrale cumule trois termes de
+        soustraction qui se recouvrent) -- empilé sur 2 DEConv par branche ×
+        3 échelles, l'instabilité s'amplifie et fait diverger
+        l'entraînement (pertes NaN). Chaque terme de différence est donc
+        exprimé comme une perturbation localisée (nulle hors des positions
+        qu'elle affecte) et atténué par `theta` avant d'être ajouté au poids
+        de base, qui reste à l'échelle d'une conv standard."""
         w = self.weight
         center = self.k // 2
 
@@ -199,13 +180,12 @@ class LSHBranch(nn.Module):
 
 
 class _AlignedSharedBox(nn.Module):
-    """Wrapper autour d'UNE branche box partagée entre échelles : aligne
+    """Wrapper autour d'une branche box partagée entre échelles : aligne
     d'abord les canaux de l'échelle (différents pour P3/P4/P5 dans une FPN
     standard) vers le canal commun de la branche partagée via une conv 1x1,
-    puis appelle cette branche. Nécessaire pour un partage de poids réel
-    (cf. bug corrigé dans LSHDetect.__init__ ci-dessous) : sans cet
-    alignement, réutiliser directement le même LSHBranch à travers des
-    échelles de canaux différents est impossible (mismatch de shape)."""
+    puis appelle cette branche -- sans cet alignement, réutiliser le même
+    LSHBranch à travers des échelles de canaux différents est impossible
+    (mismatch de shape)."""
 
     def __init__(self, c_in: int, c_common: int, shared_branch: "LSHBranch"):
         super().__init__()
@@ -228,18 +208,7 @@ class LSHDetect(Detect):
     réécrit ci-dessous car la version de Detect indexe cv2[i][-1]/cv3[i][-1]
     en supposant un nn.Sequential (comme dans Detect standard), alors que
     LSHBranch est un nn.Module avec un attribut .proj nommé, pas
-    subscriptable de la même façon.
-
-    Bug corrigé (2026-08-18, avant le premier vrai entraînement complet) :
-    la version précédente ne réutilisait `shared_box` que pour l'échelle
-    dont les canaux d'entrée coïncidaient par hasard avec `ch[0]` (P3 avec
-    `configs/bgle_yolo.yaml`, qui a ch=(128,256,512)) -- P4 et P5
-    recevaient chacun leur PROPRE LSHBranch non partagée, donc aucun
-    partage réel de poids n'avait lieu sur 2 des 3 échelles malgré ce que
-    disait ce docstring. Fix : un unique LSHBranch(c2, c2, ...) partagé,
-    précédé pour chaque échelle d'une petite conv 1x1 d'alignement de
-    canaux (`_AlignedSharedBox`) -- le partage porte maintenant sur les
-    poids DEConv+GroupNorm+proj eux-mêmes, à travers les 3 échelles."""
+    subscriptable de la même façon."""
 
     def __init__(self, nc: int = 80, ch: tuple = ()):
         super().__init__(nc, ch=ch)

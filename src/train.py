@@ -6,17 +6,13 @@ Choix par défaut, documentés plutôt qu'arbitraires :
     justifier `yolov8s` sans risque excessif de surapprentissage ; passer à
     `yolov8m`/`l` est raisonnable si la capacité s'avère limitante en
     pratique (mAP qui plafonne bien avant que la validation ne stagne).
-  - `--epochs 200` / `--patience 100` : un premier run réel (2026-08-13,
-    `portfauna_v3`, patience=20) s'est arrêté à l'époque 25 (meilleur
-    résultat époque 5, mAP50-95=0.130) — mais le taux d'apprentissage
-    d'ultralytics décroît sur la totalité de `--epochs` (ici 200), donc à
-    l'époque 25 il n'avait décru que d'environ 12% : patience=20 a
-    probablement coupé l'entraînement avant que le LR n'ait assez baissé
-    pour permettre une convergence plus fine, pas parce que le modèle avait
-    réellement atteint son plafond. `--patience 100` (la moitié de
-    `--epochs`) garantit qu'un plateau précoce ne coupe plus avant que le
-    LR ait significativement décru, tout en gardant un filet de sécurité si
-    le modèle plafonne réellement après l'époque 100.
+  - `--epochs 200` / `--patience 100` : le taux d'apprentissage d'ultralytics
+    décroît sur la totalité de `--epochs`, donc une patience trop basse
+    relativement à `--epochs` coupe l'entraînement avant que le LR ait
+    assez baissé pour permettre une convergence fine, avant même que le
+    modèle ait atteint son plafond réel. `--patience 100` (la moitié de
+    `--epochs`) laisse le LR décroître significativement avant qu'un
+    plateau précoce ne déclenche l'arrêt anticipé.
   - `--batch -1` (auto) : ultralytics choisit la taille de batch occupant
     ~60% de la VRAM disponible plutôt qu'une valeur arbitraire.
   - seed fixé (`--seed 42`) : reproductibilité.
@@ -87,6 +83,20 @@ def run_training(
     return model, run_dir
 
 
+def resume_training(last_pt: Path) -> tuple[YOLO, Path]:
+    """Reprend un entraînement interrompu depuis son `last.pt`. Contrairement à
+    `run_training()`, `resume=True` fait relire à ultralytics tous les
+    paramètres d'origine (data/epochs/imgsz/patience/...) depuis le
+    `args.yaml` du run, et restaure aussi l'état de l'optimiseur + le
+    schedule LR exactement là où il s'était arrêté -- reprendre "à froid"
+    avec un nouveau run (au lieu de resume=True) repartirait du LR de pic,
+    annulant toute la décroissance déjà faite. Écrit dans le MÊME dossier de
+    run (results.csv continue, pas de nouveau dossier)."""
+    model = YOLO(str(last_pt))
+    model.train(resume=True)
+    return model, last_pt.parent.parent
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data", default="configs/data_sfishtrack.yaml", help="data.yaml Ultralytics (défaut: configs/data_sfishtrack.yaml)")
@@ -102,6 +112,7 @@ def main():
     parser.add_argument("--name", required=True, help="Nom du run (dossier de sortie + nom du modèle final)")
     parser.add_argument("--project-dir", default="outputs/training_runs", help="Dossier racine des runs (défaut: outputs/training_runs)")
     parser.add_argument("--models-dir", default="models", help="Dossier de sortie du poids final versionné (défaut: models)")
+    parser.add_argument("--resume", action="store_true", help="Reprend le run --name interrompu depuis son weights/last.pt (ignore --data/--model/--epochs/etc., repris depuis l'args.yaml du run d'origine)")
     args = parser.parse_args()
 
     import torch
@@ -109,20 +120,27 @@ def main():
     device = args.device or ("0" if torch.cuda.is_available() else "cpu")
     print(f"Device : {device}" + (f" ({torch.cuda.get_device_name(0)})" if device != "cpu" else " (CPU — ce sera lent)"))
 
-    model, run_dir = run_training(
-        data_yaml=args.data,
-        model_name=args.model,
-        epochs=args.epochs,
-        imgsz=args.imgsz,
-        batch=args.batch,
-        patience=args.patience,
-        seed=args.seed,
-        device=device,
-        run_name=args.name,
-        project_dir=Path(args.project_dir),
-        fraction=args.fraction,
-        workers=args.workers,
-    )
+    if args.resume:
+        last_pt = Path(args.project_dir) / args.name / "weights" / "last.pt"
+        if not last_pt.exists():
+            raise FileNotFoundError(f"--resume : {last_pt} introuvable -- rien à reprendre pour --name {args.name!r}.")
+        print(f"Reprise depuis {last_pt}")
+        model, run_dir = resume_training(last_pt)
+    else:
+        model, run_dir = run_training(
+            data_yaml=args.data,
+            model_name=args.model,
+            epochs=args.epochs,
+            imgsz=args.imgsz,
+            batch=args.batch,
+            patience=args.patience,
+            seed=args.seed,
+            device=device,
+            run_name=args.name,
+            project_dir=Path(args.project_dir),
+            fraction=args.fraction,
+            workers=args.workers,
+        )
 
     best_pt = run_dir / "weights" / "best.pt"
     models_dir = Path(args.models_dir)

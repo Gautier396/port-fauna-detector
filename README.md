@@ -1,58 +1,105 @@
 # Détecteur de faune marine du port
 
-Pipeline de vision par ordinateur pour détecter et identifier automatiquement
-les poissons (+ oursins) observés dans un port méditerranéen, à partir de
-vidéos de plongée GoPro, avec un registre d'individus qui évite qu'un même
-animal revu plusieurs fois soit compté en double.
+Détection de poissons dans des vidéos de plongée GoPro filmées en
+Méditerranée, avec suivi multi-objet (ByteTrack) pour compter les individus
+distincts plutôt que les détections par frame.
 
-## Statut actuel
+Le projet a deux volets :
 
-- **Données d'entraînement** : pivot vers **SFISHTRACK** (dataset externe,
-  vidéos sous-marines annotées COCO — segmentation d'instance + tracking
-  multi-objet), remplace l'ancien pipeline iNaturalist (retiré, cf. plus
-  bas). **Téléchargé et converti** : 54 vidéos, 23 233 images, 147 582
-  boîtes dans `data/sfishtrack/` (`configs/data_sfishtrack.yaml` prêt pour
-  `train.py`).
-- **Classes labellisées par SFISHTRACK** : confirmé par inspection réelle
-  des 54 fichiers d'annotations — une seule catégorie COCO (mono-classe,
-  `"object"` ou `"fish"` selon le fichier, pas de distinction par espèce),
-  tout mappe vers `poisson` (classe 0). Les couleurs dans `Masks/` encodent
-  l'identité de suivi (tracking) par individu, pas l'espèce (vérifié sur
-  des pixels réels). Mapping codé en dur dans `src/convert_sfishtrack.py`
-  (`COCO_NAME_TO_SPECIES_NAME`) — pas de fichier de config séparé pour un
-  mapping aussi trivial.
-- **Conséquence directe** : les 24 classes d'espèces (1-24) et les 2
-  classes d'oursins (25-26) de `configs/species.yaml` n'ont plus AUCUN
-  mécanisme d'acquisition de données actif (l'ancien pipeline iNaturalist,
-  seule source qui les alimentait, a été retiré). Seule la classe `poisson`
-  (0) a une source active tant que SFISHTRACK reste mono-classe.
-- **Prétraitement** : `src/preprocess.py` corrige la dominante bleu/vert de
-  l'eau (balance des blancs gray-world, proportionnelle à la dominante
-  détectée — n'altère pas les images déjà neutres/chaudes). Appliqué en
-  place sur le dataset ET à chaque frame vidéo à l'inférence (`track.py`,
-  `app.py`), pour que l'entraînement et l'inférence voient la même
-  distribution de couleurs.
-- **Modèles entraînés** (`models/portfauna_v1.pt`, `portfauna_v2.pt`) :
-  issus de l'ancien pipeline iNaturalist, **obsolètes** — un nouvel
-  entraînement sur SFISHTRACK est nécessaire avant d'utiliser `app.py` en
-  confiance.
-- **Pipeline vidéo** (tracking → embeddings → registre → export) :
-  jamais exécuté sur une vraie vidéo du port.
+1. **BGLE-YOLO** — reconstruction "from scratch" d'une architecture de
+   détection légère spécialisée sous-marin, à partir de sa description
+   publiée (pas de code officiel disponible). C'est le cœur technique du
+   projet.
+2. **Un benchmark YOLOv8** entraîné sur les mêmes données, utilisé comme
+   point de comparaison pour évaluer BGLE-YOLO.
 
-## Architecture
+## Résultats
+
+| | mAP50-95 | Précision | Rappel |
+|---|---|---|---|
+| YOLOv8s (`portfauna_v3`, référence) | 0.130 | 0.398 | 0.351 |
+| BGLE-YOLO (meilleure époque) | 0.118 | 0.375 | 0.337 |
+
+BGLE-YOLO n'a pas encore rattrapé le benchmark, avec deux réserves : il part
+d'une initialisation aléatoire (aucun poids pré-entraîné n'existe pour cette
+architecture, contrairement à YOLOv8 pré-entraîné sur COCO), et son
+entraînement s'est arrêté avant la fin du schedule de taux d'apprentissage
+prévu.
+
+## BGLE-YOLO
+
+Reconstruction "best-effort" de l'architecture décrite dans Zhang et al.,
+*"BGLE-YOLO: A Lightweight Model for Underwater Bio-Detection"* (2025) — les
+auteurs ne partagent pas leur code. L'implémentation ci-dessous suit l'esprit
+de chaque module décrit dans le papier (convolution multi-échelle, attention
+globale/locale, convolution à différences reparamétrée, tête légère à poids
+partagés), sans être une reproduction exacte : certains détails (ratios de
+canaux, nombre de répétitions) ne sont pas spécifiés dans le papier et ont
+été choisis raisonnablement.
+
+Basée sur un squelette YOLOv8s (échelle `s`), nc=1 (poisson), ~14.2M
+paramètres.
+
+**Backbone — EMC (Efficient Multi-Scale Convolution)** : module à canaux
+préservés inséré après chaque bloc C2f. La moitié des canaux passe sans
+convolution ; l'autre moitié est traitée en parallèle par des noyaux 3×3 et
+5×5, fusionnés par une convolution 1×1.
+
+**Neck — GLSA (Global-to-Local Spatial Aggregation)** : combine une
+attention globale (self-attention sur la carte de features aplatie) et une
+attention locale (convolution séparable depthwise), fusionnées par une
+convolution 1×1. Insérée après chaque bloc C2f du neck FPN/PAN.
+
+**Tête — LSHDetect (Lightweight Shared Head)** : la branche de régression de
+boîte partage ses poids entre les trois échelles (P3/P4/P5), avec un
+alignement de canaux par 1×1 en amont pour rendre ce partage possible malgré
+les canaux différents à chaque échelle ; la branche de classification garde
+des poids séparés par échelle. Les convolutions internes utilisent
+**DEConv** (Detail-Enhanced Convolution) : un poids de base combiné à quatre
+variantes de différence (centrale, horizontale, verticale, angulaire),
+reparamétrées en un seul noyau effectif — un unique appel `conv2d` à
+l'inférence, sans coût additionnel. Les termes de différence sont atténués
+par un facteur `θ=0.2` avant d'être ajoutés au poids de base ; sans cette
+atténuation, l'entraînement diverge (pertes NaN après une vingtaine
+d'époques).
+
+Code : `src/nn/bgle_modules.py` (modules), `src/nn/register.py`
+(enregistrement auprès d'ultralytics), `configs/bgle_yolo.yaml` (assemblage).
+
+## Jeu de données
+
+[SFISHTRACK](https://doi.org/10.1038/s41597-026-07786-z) — vidéos
+sous-marines annotées (boîtes englobantes, segmentation, suivi multi-objet),
+collectées en mer Baléare :
+
+> Sanchez, J., Lisani, J.L., Catalan, I.A. et al. *A Dataset for Fish
+> Segmentation and Tracking in Underwater Videos.* Scientific Data 13, 1181
+> (2026). https://doi.org/10.1038/s41597-026-07786-z
+
+54 vidéos, 23 233 images, 147 582 boîtes converties en labels YOLO
+(`src/convert_sfishtrack.py`). Le jeu est mono-classe (poisson) : les
+catégories COCO du dataset ne distinguent pas les espèces.
+
+Un prétraitement de balance des blancs gray-world (`src/preprocess.py`)
+corrige la dominante bleu/vert de l'eau, appliqué de façon identique au
+dataset d'entraînement et à chaque frame vidéo à l'inférence.
+
+## Structure
 
 ```
-SFISHTRACK (COCO, par vidéo) ──► convert_sfishtrack.py ──► images + boîtes YOLO (data/sfishtrack/)
-                                                                          │
-                                                                          ▼
-                                                         train.py ──► models/<name>.pt
-
-Vidéo GoPro ──► track.py (détection+tracking) ──┬─► embeddings.py ──► registry.py ──► export.py
-                                                  └─► review_queue.py (si confiance basse) ──► resolve_review.py
+src/
+  nn/bgle_modules.py      architecture BGLE-YOLO (EMC, GLSA, LSHDetect, DEConv)
+  nn/register.py          enregistrement des modules custom auprès d'ultralytics
+  convert_sfishtrack.py   annotations COCO SFISHTRACK -> labels YOLO
+  preprocess.py           correction couleur sous-marine
+  train.py                entraînement (YOLOv8 ou BGLE-YOLO selon --model)
+configs/
+  bgle_yolo.yaml           assemblage du modèle BGLE-YOLO
+  data_sfishtrack.yaml      config ultralytics générée par convert_sfishtrack.py
+  species.yaml              nomenclature des espèces cibles (vision long terme)
+app.py                      démo Gradio : détection + suivi + comptage (port 7860)
+view_labels.py               revue des labels générés (port 7862)
 ```
-
-`pipeline.py` enchaîne tracking → embeddings → registre pour une vidéo.
-`app.py` : voir Structure.
 
 ## Installation
 
@@ -60,79 +107,53 @@ Vidéo GoPro ──► track.py (détection+tracking) ──┬─► embeddings
 pip install -r requirements.txt
 ```
 
-## Structure
-
-```
-src/
-  convert_sfishtrack.py     <- convertit les annotations COCO SFISHTRACK (par vidéo) en labels YOLO
-  preprocess.py              <- correction couleur sous-marine (dataset en place + frames vidéo à l'inférence)
-  train.py                  <- entraînement YOLO -> models/<name>.pt
-  track.py                  <- détection + ByteTrack + crops (marque needs_review)
-  review_queue.py           <- file de vérification (tracks à confiance basse)
-  resolve_review.py         <- referme la file une fois l'espèce confirmée
-  embeddings.py             <- embedding ResNet18 par track
-  registry.py               <- registre SQLite + anti-doublon (espèce + fenêtre temporelle)
-  export.py                 <- CSV, stats
-configs/
-  species.yaml                    <- 27 classes CIBLES (PROVISOIRE, vision long terme -- pas ce qu'on entraîne aujourd'hui)
-  data_sfishtrack.yaml            <- généré par convert_sfishtrack.py -- ne contient QUE les classes
-                                      réellement présentes dans les labels (juste "poisson" à ce jour),
-                                      pas les 27 de species.yaml -- entraîner sur 27 classes nominales
-                                      alors que 26 n'ont aucun exemple aurait été un gâchis de capacité
-data/sfishtrack/              <- images + labels YOLO générés par convert_sfishtrack.py (54 vidéos, 147582 boîtes)
-data/external/sfishtrack/     <- SFISHTRACK.zip (25.6 Go, gardé comme sauvegarde -- le dossier
-                                  extrait a été supprimé après conversion pour l'espace disque ;
-                                  ré-extraire avec `unzip SFISHTRACK.zip` si besoin de retraiter)
-outputs/                     <- registry.db, tracks/, crops/, embeddings/, review_queue/
-pipeline.py                  <- orchestrateur bout-en-bout (une vidéo -> registre)
-app.py                       <- interface glisser-déposer, test vidéo avec le dernier modèle (port 7860)
-view_labels.py                <- revue en lecture seule des labels générés (port 7862)
-```
-
 ## Utilisation
 
 ```bash
-# Si besoin de retraiter (le dossier extrait est supprimé après conversion) :
-unzip data/external/sfishtrack/SFISHTRACK.zip -d data/external/sfishtrack/
-
-# 1. Voir les catégories réelles + couverture du mapping (aucune écriture)
-python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/SFISHTRACK --check-only
-
-# 2. Convertir (écrase data/sfishtrack/)
+# Conversion du dataset SFISHTRACK
 python src/convert_sfishtrack.py --dataset-root data/external/sfishtrack/SFISHTRACK --output data/sfishtrack
 
-# Correction couleur sous-marine (en place, idempotent) :
-python src/preprocess.py --images-dir data/sfishtrack
+# Entraînement — benchmark YOLOv8
+python src/train.py --data configs/data_sfishtrack.yaml --model yolov8s.pt --name portfauna_v3
 
-# Entraînement :
-python src/train.py --data configs/data_sfishtrack.yaml --name portfauna_v3
+# Entraînement — BGLE-YOLO
+python src/train.py --data configs/data_sfishtrack.yaml --model configs/bgle_yolo.yaml --name portfauna_bgle
+python src/train.py --name portfauna_bgle --resume   # reprise après interruption
 
-# Pipeline vidéo complet :
-python pipeline.py --video data/raw/plongee1.mp4 --model models/portfauna_v3.pt
-
-# Test rapide glisser-déposer :
+# Démo glisser-déposer
 python app.py
-
-# Revue des labels générés :
-python view_labels.py
 ```
+
+## Licence
+
+Ce projet dépend d'[Ultralytics YOLO](https://github.com/ultralytics/ultralytics),
+distribué sous licence **AGPL-3.0**. En l'absence de licence Enterprise
+Ultralytics, ce dépôt est donc lui-même publié sous **AGPL-3.0** (voir
+[`LICENSE`](LICENSE)) — toute utilisation, modification ou mise à
+disposition en réseau (y compris `app.py`) est soumise aux termes de cette
+licence, notamment l'obligation de rendre le code source disponible.
+
+BGLE-YOLO est une réimplémentation indépendante inspirée de la description
+publiée par Zhang et al. (2025) ; elle n'utilise ni le code ni les poids des
+auteurs originaux, qui ne sont pas publics. Le jeu de données SFISHTRACK est
+utilisé conformément à sa publication (Sanchez et al., 2026, voir
+ci-dessus) ; se référer à sa source pour les conditions d'utilisation
+propres au dataset.
 
 ## Points ouverts
 
-- **`portfauna_v3` pas encore entraîné** sur SFISHTRACK — les données sont
-  prêtes (`configs/data_sfishtrack.yaml`), reste à lancer `train.py`.
-- **24 classes d'espèces + 2 classes d'oursins sans source de données** :
-  l'ancien pipeline iNaturalist (seule source qui les alimentait) a été
-  retiré (2026-08-12, pivot SFISHTRACK) — seule la classe `poisson` a une
-  source active, SFISHTRACK étant mono-classe (confirmé). À rouvrir
-  explicitement si ces classes doivent être ré-alimentées un jour.
-- **Modèles existants obsolètes** (`portfauna_v1`/`v2`, issus de
-  l'ancien pipeline iNaturalist, gardés comme référence historique) — à
-  remplacer par `portfauna_v3` avant tout usage réel.
-- **`species.yaml`** toujours provisoire, à valider avec le Parc/les plongeurs.
-- **Seuils non calibrés** : anti-doublon registre (`--threshold` 0.75),
-  file de vérification (`--review-threshold` 0.5).
-- **Pipeline vidéo jamais testé** sur une vraie vidéo du port.
-- **iNaturalist et SFISHTRACK ne doivent pas être mélangés** dans un même
-  jeu d'entraînement (demande explicite) — pas de mécanisme de fusion
-  multi-source actuellement dans le projet.
+- La nomenclature d'espèces (`configs/species.yaml`) reste provisoire, sans
+  source de données active pour l'instant : SFISHTRACK est mono-classe.
+- BGLE-YOLO n'a pas terminé son schedule d'entraînement complet.
+
+## Pistes futures
+
+**Registre d'individus inter-vidéos** : au-delà du comptage par vidéo
+(actuel, via les IDs ByteTrack dans `app.py`), une piste explorée puis mise
+de côté consiste à dédupliquer les individus revus d'une plongée à l'autre —
+embedding visuel par crop détecté (ex. ResNet18), registre persistant avec
+appariement par similarité cosinus (restreint à une fenêtre temporelle
+plausible), et une file de vérification manuelle pour les détections à
+confiance trop faible pour être enregistrées automatiquement. Non
+implémentée actuellement ; à reprendre si le comptage inter-plongées devient
+un besoin réel.

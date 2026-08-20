@@ -1,22 +1,12 @@
-# Classes d'espèces cibles pour le fine-tuning YOLO.
+# Nomenclature d'espèces cibles, vision long terme du projet. Provisoire, à
+# valider avec le Parc/les plongeurs. Recentrée sur les poissons (+ oursins,
+# exception gardée explicitement) ; céphalopodes, crustacés, autres
+# échinodermes, mollusques et cnidaires sont hors périmètre.
 #
-# Recentré sur les POISSONS le 2026-08-12 (demande explicite) — les
-# céphalopodes, crustacés, échinodermes (sauf oursins, gardés explicitement),
-# mollusques et cnidaires précédemment présents ont été retirés, avec leurs
-# données (images/labels purgés de data/inaturalist, data/roboflow,
-# data/fathomnet). Toujours PROVISOIRE, à valider avec le Parc/les plongeurs.
-#
-# Classe 0 "poisson" : pas une espèce, une classe PARENTE générique.
-# Historiquement (pipeline iNaturalist, retiré 2026-08-12 lors du pivot
-# SFISHTRACK) peuplée en dupliquant chaque boîte d'espèce (classes 1-24)
-# sous "poisson" en plus de l'espèce précise (src/add_fish_umbrella.py,
-# supprimé avec le reste du pipeline iNaturalist). SFISHTRACK écrit
-# directement en "poisson" (dataset mono-classe à ce jour -- catégorie COCO
-# "object" ou "fish" selon le fichier, cf. COCO_NAME_TO_SPECIES_NAME dans
-# src/convert_sfishtrack.py)
-# -- pas de duplication en jeu actuellement. Les classes 1-24 (espèces) et
-# 25-26 (oursins) n'ont plus de source de données active (cf. README Points
-# ouverts).
+# Classe 0 "poisson" est une classe parente générique, pas une espèce.
+# SFISHTRACK (seule source de données active, cf. README) est mono-classe et
+# écrit directement en "poisson" -- les classes 1-24 (espèces) et 25-26
+# (oursins) n'ont pour l'instant aucune source de données qui les peuple.
 names:
   0: poisson                     # classe parente générique
 

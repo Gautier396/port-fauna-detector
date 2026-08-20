@@ -17,12 +17,11 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 # models/*.pt peut être un checkpoint BGLE-YOLO (cf. src/nn/), dont les
 # classes custom sont picklées sous le chemin "nn.bgle_modules.*" -- train.py
 # tourne depuis src/ où "nn" résout naturellement vers src/nn/, mais app.py
-# tourne depuis la racine du projet, donc "nn" doit être ajouté explicitement
-# ici pour résoudre pareil, sinon le dépicklage échoue (soit en trouvant le
-# mauvais "nn" -- un paquet PyPI sans rapport, cassé, installé sur cette
-# machine -- soit en ne trouvant rien du tout). Ajouter src/ en tête de
-# sys.path avant tout, puis enregistrer EMC/GLSA/LSHDetect comme le fait
-# train.py, pour que "nn" résolve correctement quel que soit le modèle chargé.
+# tourne depuis la racine du projet. "nn" doit donc être ajouté explicitement
+# au sys.path ici pour résoudre pareil (sinon le dépicklage échoue, ou pire,
+# résout vers un paquet PyPI "nn" sans rapport si un est installé), puis
+# enregistrer EMC/GLSA/LSHDetect comme le fait train.py, pour que "nn"
+# résolve correctement quel que soit le modèle chargé.
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 import nn.register  # noqa: E402,F401 -- effet de bord (cf. commentaire ci-dessus)
 
@@ -48,10 +47,10 @@ def run_detection(video_path: str, conf: float):
     """Générateur : une frame annotée à la fois pendant le traitement, puis la vidéo
     complète une fois terminé (gr.skip() laisse les sorties non concernées inchangées).
 
-    Utilise model.track() (ByteTrack, comme src/track.py) plutôt que
-    model.predict() : suivre chaque poisson d'une frame à l'autre est ce qui
-    permet le compteur (compter les IDs distincts, pas les boîtes par frame —
-    sinon un même poisson vu 50 frames compterait 50 fois)."""
+    Utilise model.track() (ByteTrack) plutôt que model.predict() : suivre
+    chaque poisson d'une frame à l'autre est ce qui permet le compteur
+    (compter les IDs distincts, pas les boîtes par frame — sinon un même
+    poisson vu 50 frames compterait 50 fois)."""
     if not video_path:
         yield gr.skip(), gr.skip(), "Dépose une vidéo pour commencer."
         return
