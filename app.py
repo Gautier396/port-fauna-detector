@@ -1,6 +1,6 @@
-"""Interface de test rapide : glisser une vidéo, détection avec le dernier
-modèle entraîné (le `.pt` le plus récent dans `models/`), boxes + noms
-d'espèces affichés au fil du traitement (pas seulement à la fin).
+"""Interface de test rapide : glisser une vidéo, détection avec le modèle
+YOLOv8 (benchmark, cf. README), boxes + noms d'espèces affichés au fil du
+traitement (pas seulement à la fin).
 
 Usage:
     python app.py
@@ -28,12 +28,19 @@ MODELS_DIR = PROJECT_ROOT / "models"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "demo"
 DEVICE = "0" if torch.cuda.is_available() else "cpu"
 
+# Modèle YOLOv8 (benchmark, cf. README) -- pas de sélection automatique du
+# .pt le plus récent dans models/ : ce dossier contient aussi des
+# checkpoints BGLE-YOLO (architecture expérimentale, moins performante pour
+# l'instant), qu'un choix basé sur la date de modification finirait par
+# préférer par accident.
+MODEL_NAME = "portfauna_v3.pt"
 
-def latest_model_path() -> Path:
-    candidates = sorted(MODELS_DIR.glob("*.pt"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not candidates:
-        raise FileNotFoundError(f"Aucun modèle .pt dans {MODELS_DIR} — entraîne d'abord un modèle (src/train.py).")
-    return candidates[0]
+
+def demo_model_path() -> Path:
+    path = MODELS_DIR / MODEL_NAME
+    if not path.exists():
+        raise FileNotFoundError(f"{path} introuvable — entraîne d'abord ce modèle (src/train.py).")
+    return path
 
 
 def run_detection(video_path: str, conf: float):
@@ -48,7 +55,7 @@ def run_detection(video_path: str, conf: float):
         return
 
     try:
-        model_path = latest_model_path()
+        model_path = demo_model_path()
     except FileNotFoundError as exc:
         yield gr.skip(), gr.skip(), str(exc)
         return
@@ -104,14 +111,14 @@ def run_detection(video_path: str, conf: float):
 
 def build_interface() -> gr.Blocks:
     try:
-        default_model = latest_model_path().name
+        default_model = demo_model_path().name
     except FileNotFoundError as exc:
         default_model = str(exc)
 
     with gr.Blocks(title="Détecteur de faune marine du port") as demo:
         gr.Markdown(
             f"# Détecteur de faune marine du port — test rapide\n"
-            f"Modèle utilisé (le plus récent dans `models/`) : **{default_model}**"
+            f"Modèle utilisé : **{default_model}**"
         )
         with gr.Row():
             video_in = gr.Video(label="Glisser une vidéo ici", sources=["upload"])
