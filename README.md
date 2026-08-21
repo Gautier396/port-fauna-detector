@@ -175,12 +175,6 @@ Vincent Bardinal (image et vidéo de démo principales, `docs/demo.png`,
 [UCLDsTtyfNNWudB6p48LfIMA](https://www.youtube.com/channel/UCLDsTtyfNNWudB6p48LfIMA)
 (`docs/demo-bgle.mp4`, `docs/demo-yolov8.mp4`), droits de l'auteur d'origine.
 
-## Points ouverts
-
-- BGLE-YOLO n'a pas terminé son schedule d'entraînement complet.
-- La nomenclature cible à 27 classes (`docs/species_roadmap.yaml`) n'a
-  aucune source de données active pour l'instant : SFISHTRACK est mono-classe.
-
 ## Pistes futures
 
 **Comptage de poissons** : `app.py` a eu un compteur par vidéo (agrégation
